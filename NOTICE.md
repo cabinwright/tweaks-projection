@@ -1,6 +1,6 @@
 # Notices
 
-kia-tweaks-projection is licensed under the GNU Affero General Public License v3.0 or later
+tweaks-projection is licensed under the GNU Affero General Public License v3.0 or later
 (`LICENSE`), Copyright (c) 2026 hazptr. It contains work from the projects below, which keep
 their authors' licences and notices.
 

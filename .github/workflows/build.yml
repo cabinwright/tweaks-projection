@@ -57,5 +57,5 @@ jobs:
           install \`tweaks.projection-v$VERSION.zip\` with NEMESIS (\`nemesis install --update <zip>\` over ADB).
           Moving from HMG Leafia Plus's wireless.carplay.aa: see docs/migration.md.
           NOTES
-          gh release create "$GITHUB_REF_NAME" dist/*.zip --title "kia-tweaks-projection $GITHUB_REF_NAME" \
+          gh release create "$GITHUB_REF_NAME" dist/*.zip --title "tweaks-projection $GITHUB_REF_NAME" \
             --notes-file "$RUNNER_TEMP/notes.md" --generate-notes

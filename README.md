@@ -1,4 +1,4 @@
-# kia-tweaks-projection
+# tweaks-projection
 
 A tweak pack for [kia-tweaks](https://github.com/hazptr/kia-tweaks): wireless Android Auto and
 CarPlay, phone navigation directions in the instrument cluster, and two fixes that keep wireless
