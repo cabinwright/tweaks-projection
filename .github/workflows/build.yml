@@ -35,7 +35,28 @@ jobs:
           fi
 
       - name: Shell syntax
-        run: for f in $(find package tests -name '*.sh') package/lib/ifconfig; do sh -n "$f" || exit 1; done
+        run: for f in $(find package tests tools -name '*.sh') package/lib/ifconfig; do sh -n "$f" || exit 1; done
+
+      - name: Tweaks
+        run: sh tools/check-tweaks.sh package
+
+      # the pinned lint tools and settings of the Cabinwright repos
+      - uses: actions/checkout@v4
+        with:
+          repository: cabinwright/menu
+          ref: v1.0
+          path: menu
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/cabinwright-tools
+          key: cabinwright-tools-${{ runner.os }}-${{ hashFiles('menu/api/tools/fetch-tools.sh') }}
+
+      # ShellCheck (the tweak scripts as the car's mksh) and javac on the patch tool
+      - name: Lint
+        run: |
+          sh menu/api/tools/fetch-tools.sh
+          sh menu/api/tools/lint.sh .
 
       - name: Build
         run: |
@@ -53,8 +74,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           cat > "$RUNNER_TEMP/notes.md" <<NOTES
-          NEMESIS package \`tweaks.projection\` $VERSION, a tweak pack for Cabinwright tweaks (needs cabinwright.tweaks 1.4 or newer):
-          install \`tweaks.projection-v$VERSION.zip\` with NEMESIS (\`nemesis install --update <zip>\` over ADB).
+          \`tweaks.projection\` $VERSION, a tweak pack for Cabinwright: install it from the Cabinwright store
+          (cabinwright.store 1.0 or newer), whose runner runs its tweaks.
           Moving from HMG Leafia Plus's wireless.carplay.aa: see docs/migration.md.
           NOTES
           gh release create "$GITHUB_REF_NAME" dist/*.zip --title "tweaks-projection $GITHUB_REF_NAME" \

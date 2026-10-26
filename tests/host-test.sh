@@ -1,9 +1,13 @@
 #!/bin/sh
-# Host test: runs the two tweaks' enable/disable/status scripts against a mock /system made
-# from a 2023 Kia EV6 (260507)'s stock files, with the pack's projpatch run by the host JVM and
-# stubs for md5, getprop/setprop, nemesis and dexopt. Passes only if every result has the
-# checksums HMG Leafia Plus's own install has on the car, and turning off restores /system
-# byte for byte.
+# Host test: runs the pack's tweaks against a mock /system made from a 2023 Kia EV6 (260507)'s
+# stock files, the way the store's runner runs them: as scripts that can't write /system, with
+# $TWEAK_ID, $TWEAK_DIR and $TWEAK_DATA set and a stand-in kt (tests/fake-kt.sh) that checks
+# every call against the tweak's need= lines and keeps the runner's journal. Turning a tweak off
+# is its disable.sh, if any, then the journal replayed. The pack's projpatch runs on the host
+# JVM; md5, getprop, setprop and dexopt are stubs. Passes only if every result has the
+# checksums HMG Leafia Plus's own install has on the car, turning off restores /system byte for
+# byte in any order, Leafia's install is taken over without a change, and no tweak calls kt
+# for something it didn't declare.
 #
 # usage: tests/host-test.sh <stock dir>
 #   <stock dir> is laid out like Leafia's backups on the car (adb pull /data/nemesis/backup):
@@ -19,53 +23,65 @@ W=$(mktemp -d)
 trap 'chmod -R u+w "$W"; rm -rf "$W"' EXIT
 FAILS=0
 
-md5of() { if command -v md5sum >/dev/null; then md5sum "$1" | cut -d' ' -f1; else md5 -q "$1"; fi; }
 
-mkdir -p "$W/kp" "$W/stubs"
-javac -nowarn -d "$W/kp" "$HERE"/patch/src/dev/cabinwright/tweaks/projection/patch/*.java 2>/dev/null
+mkdir -p "$W/kp" "$W/stubs" "$W/priv"
+javac -nowarn -d "$W/kp" "$HERE"/patch/src/app/cabinwright/tweaks/projection/patch/*.java 2>/dev/null
 REAL_MD5=$(command -v md5sum || command -v md5)
 REAL_CAT=$(command -v cat)
-cat > "$W/stubs/md5" <<EOF
+md5of() { case "$REAL_MD5" in *md5sum) md5sum "$1" | cut -d' ' -f1 ;; *) "$REAL_MD5" -q "$1" ;; esac; }
+cat >"$W/stubs/md5" <<EOF
 #!/bin/sh
 [ -f "\$1" ] || { echo "could not open \$1" >&2; exit 1; }
 case "$REAL_MD5" in *md5sum) s=\$($REAL_MD5 "\$1" | cut -d' ' -f1) ;; *) s=\$($REAL_MD5 -q "\$1") ;; esac
 echo "\$s  \$1"
 EOF
-cat > "$W/stubs/getprop" <<'EOF'
+cat >"$W/stubs/getprop" <<'EOF'
 #!/bin/sh
 cat "$KT_TEST_ROOT/props/$1" 2>/dev/null
 EOF
-cat > "$W/stubs/setprop" <<'EOF'
+# only kt has setprop
+cat >"$W/priv/setprop" <<'EOF'
 #!/bin/sh
 mkdir -p "$KT_TEST_ROOT/props" "$KT_TEST_ROOT/data/property"
 printf '%s' "$2" > "$KT_TEST_ROOT/props/$1"
 case "$1" in persist.*) printf '%s' "$2" > "$KT_TEST_ROOT/data/property/$1" ;; esac
 EOF
-printf '#!/bin/sh\nexit 0\n' > "$W/stubs/sleep"
-printf '#!/bin/sh\ncase "$1" in /proc/sys/kernel/random/boot_id) echo test-boot ;; *) %s "$@" ;; esac\n' "$REAL_CAT" > "$W/stubs/cat"
-chmod 755 "$W"/stubs/*
+printf '#!/bin/sh\nexit 0\n' >"$W/stubs/sleep"
+cat >"$W/stubs/cat" <<EOF
+#!/bin/sh
+case "\$1" in /proc/sys/kernel/random/boot_id) echo test-boot ;; *) $REAL_CAT "\$@" ;; esac
+EOF
+cp "$HERE/tests/fake-kt.sh" "$W/stubs/kt"
+chmod 755 "$W"/stubs/* "$W"/priv/*
 
-export KT_TEST_ROOT=$W/root KT_TEST_PATH=$W/stubs:/usr/bin:/bin:/usr/sbin:/sbin
-export KT_TEST_KP="java -cp $W/kp dev.cabinwright.tweaks.projection.patch.Main"
+export KT_TEST_ROOT="$W/root" KT_JOURNAL="$W/journal" KT_LOG="$W/kt.log" KT_TEST_SETPROP="$W/priv/setprop"
+export KT_TEST_KP="java -cp $W/kp app.cabinwright.tweaks.projection.patch.Main"
+export PATH="$W/stubs:/usr/bin:/bin:/usr/sbin:/sbin"
 M=$KT_TEST_ROOT
 
-mock() {   # a stock /system
-    rm -rf "$M"
-    mkdir -p $M/system/app $M/system/lib $M/system/onebin/cvev_us $M/system/etc/permissions $M/system/xbin \
-        $M/system/bin $M/data/nemesis/backup $M/data/property $M/props
-    for a in HKMC_GPM HKMC_DiPO Iap2ServerApp HKMC_Navi_ExSL; do cp "$STOCK/projection.tbt/$a.apk" "$STOCK/projection.tbt/$a.odex" $M/system/app/; done
-    cp "$STOCK"/projection.menu/HKMC_BtSettings.apk "$STOCK"/projection.menu/HKMC_BtSettings.odex $M/system/app/
+mock() {   # a stock /system, read-only to the scripts, and a runner with nothing recorded
+    [ -d "$M" ] && chmod -R u+w "$M"
+    rm -rf "$M" "$KT_JOURNAL" "$W/data"
+    : >"$KT_LOG"
+    mkdir -p "$M/system/app" "$M/system/lib" "$M/system/onebin/cvev_us" "$M/system/etc/permissions" \
+        "$M/system/bin" "$M/data/nemesis/backup" "$M/data/property" "$M/props"
+    for a in HKMC_GPM HKMC_DiPO Iap2ServerApp HKMC_Navi_ExSL; do cp "$STOCK/projection.tbt/$a.apk" "$STOCK/projection.tbt/$a.odex" "$M/system/app/"; done
+    cp "$STOCK"/projection.menu/HKMC_BtSettings.apk "$STOCK"/projection.menu/HKMC_BtSettings.odex "$M/system/app/"
     cp "$STOCK/projection.tbt/libautoreceiver_infobank.so" "$STOCK/wireless.carplay.bt/libCarPlayCore.so" \
-        "$STOCK/carplay.wifi.audio/libCarPlayAudio.so" "$STOCK/carplay.wifi.audio/libCarPlayUtils.so" $M/system/lib/
-    cp "$STOCK/wireless.projection/featurexml.cfg" $M/system/onebin/cvev_us/
-    printf '#!/bin/sh\nexit 0\n' > $M/system/xbin/nemesis
+        "$STOCK/carplay.wifi.audio/libCarPlayAudio.so" "$STOCK/carplay.wifi.audio/libCarPlayUtils.so" "$M/system/lib/"
+    cp "$STOCK/wireless.projection/featurexml.cfg" "$M/system/onebin/cvev_us/"
     # a deterministic stand-in for dexopt
-    printf '#!/bin/sh\n[ "$1" = --preopt ] || exit 1\n{ echo odex; cat "$2"; } > "$3"\n' > $M/system/bin/dexopt
-    chmod 755 $M/system/xbin/nemesis $M/system/bin/dexopt
+    cat >"$M/system/bin/dexopt" <<'EOF'
+#!/bin/sh
+[ "$1" = --preopt ] || exit 1
+{ echo odex; cat "$2"; } > "$3"
+EOF
+    chmod 755 "$M/system/bin/dexopt"
+    find "$M/system" -type d -exec chmod a-w {} +
 }
 
 sums() {
-    (cd "$M" && find system -type f ! -name nemesis ! -name dexopt | sort | while read -r f; do echo "$(md5of "$f") $f"; done
+    (cd "$M" && find system -type f ! -name dexopt | sort | while read -r f; do echo "$(md5of "$f") $f"; done
      for p in persist.sys.iap2.wifi persist.iap2.iden.wireless; do
          echo "prop $p=[$(cat props/$p 2>/dev/null)] file=$([ -e data/property/$p ] && echo y || echo n)"
      done)
@@ -89,73 +105,181 @@ prop persist.sys.iap2.wifi=[t] file=y
 prop persist.iap2.iden.wireless=[t] file=y"
 
 ok() { echo "  ok: $1"; }
-bad() { echo "  FAILED: $1"; FAILS=$((FAILS + 1)); }
-status() { echo "$(sh $T/cluster-directions/status.sh) | $(sh $T/wireless-projection/status.sh)"; }
+bad() {
+    echo "  FAILED: $1"
+    FAILS=$((FAILS + 1))
+}
+# as <tweak> <command...>: runs a command with the tweak's runner environment
+as() {
+    id=$1
+    shift
+    mkdir -p "$W/data/$id"
+    TWEAK_ID=$id TWEAK_DIR=$T/$id TWEAK_DATA=$W/data/$id "$@"
+}
+status() { echo "$(as cluster-directions sh "$T/cluster-directions/status.sh") | $(as wireless-projection sh "$T/wireless-projection/status.sh")"; }
 expect() {   # <directions state> <wireless state>
-    local s
     s=$(status)
     case "$s" in "$1 "*"| $2 "*) ok "status: $s" ;; *) bad "status: $s (want $1 / $2)" ;; esac
 }
-run() {   # <tweak> <enable|disable> [fail]
-    if sh $T/$1/$2.sh > "$W/log" 2>&1; then
-        [ "$3" = fail ] && { bad "$1 $2 should have failed"; cat "$W/log"; } || ok "$1 $2"
+on() {   # <tweak> [fail]: enable.sh, as the runner runs it
+    if as "$1" sh "$T/$1/enable.sh" >"$W/log" 2>&1; then
+        if [ "$2" = fail ]; then
+            bad "$1 on should have failed"
+            cat "$W/log"
+        else
+            ok "$1 on: $(grep -v '^built\|^installed\|^took over\|^applied\|^kept\| on$' "$W/log" | tr '\n' ' ')"
+        fi
+    elif [ "$2" = fail ]; then
+        ok "$1 on refused/failed as it should: $(grep FAIL "$W/log" | tr '\n' ' ')"
     else
-        [ "$3" = fail ] && ok "$1 $2 refused/failed as it should" || { bad "$1 $2"; cat "$W/log"; }
+        bad "$1 on"
+        cat "$W/log"
     fi
 }
-is_leafia() { sums | grep -v '\.odex$' > "$W/now"; echo "$LEAFIA" | sort > "$W/want"; sort "$W/now" | diff "$W/want" - > /dev/null && ok "files match the car's Leafia install" || { bad "files differ from the car's Leafia install"; sort "$W/now" | diff "$W/want" - || true; }; }
-is_stock() { sums | diff "$W/stock" - > /dev/null && ok "byte-identical to stock" || { bad "not stock"; sums | diff "$W/stock" - || true; }; }
+off() {   # <tweak>: its disable.sh, then the runner's replay of its journal
+    if [ -f "$T/$1/disable.sh" ]; then as "$1" sh "$T/$1/disable.sh" >/dev/null 2>&1 || bad "$1 disable.sh"; fi
+    as "$1" kt --off "$1"
+    ok "$1 off"
+}
+is_leafia() {
+    sums | grep -v '\.odex$' | sort >"$W/now"
+    echo "$LEAFIA" | sort >"$W/want"
+    if diff "$W/want" "$W/now" >/dev/null; then ok "files match the car's Leafia install"; else
+        bad "files differ from the car's Leafia install"
+        diff "$W/want" "$W/now" || true
+    fi
+}
+is_stock() {
+    if sums | diff "$W/stock" - >/dev/null; then ok "byte-identical to stock"; else
+        bad "not stock"
+        sums | diff "$W/stock" - || true
+    fi
+}
+unchanged() {   # <snapshot>
+    if sums | diff "$1" - >/dev/null; then ok "nothing on /system changed"; else
+        bad "/system changed"
+        sums | diff "$1" - || true
+    fi
+}
+declared() {
+    if grep DENIED "$KT_LOG"; then bad "kt calls outside the needs"; else ok "every kt call was declared"; fi
+}
 
-echo "A. stock car: each tweak on and off, in both orders"
-mock; sums > "$W/stock"; expect off off
-run cluster-directions enable; expect on off
-run wireless-projection enable; expect on on; is_leafia
-run cluster-directions disable; expect off on
-run wireless-projection disable; expect off off; is_stock
-run wireless-projection enable; expect off on
-run cluster-directions enable; expect on on; is_leafia
-run wireless-projection disable; expect on off
-run cluster-directions disable; expect off off; is_stock
-run cluster-directions disable
-
-echo "B. the car as Leafia left it: no backup of ours, Leafia's backups in place"
+echo "A. stock car: each tweak on and off, in every order"
 mock
-for d in projection.tbt wireless.carplay.bt carplay.wifi.audio projection.menu; do cp -R "$STOCK/$d" $M/data/nemesis/backup/; done
-sh $T/cluster-directions/enable.sh > /dev/null 2>&1; sh $T/wireless-projection/enable.sh > /dev/null 2>&1
-rm -rf $M/data/nemesis/backup/tweaks.projection $M/data/nemesis/tweaks.projection
-is_leafia; expect on on
-sh $HERE/package/lib/projection-adopt.sh > "$W/log" 2>&1 && ok "projection-adopt.sh" || { bad "projection-adopt.sh"; cat "$W/log"; }
-rm -rf $M/data/nemesis/backup/tweaks.projection   # turning off must also work from Leafia's backups alone
-run wireless-projection disable; expect on off
-run cluster-directions disable; expect off off; is_stock
+sums >"$W/stock"
+expect off off
+on cluster-directions; expect on off
+on wireless-projection; expect on on; is_leafia
+off cluster-directions; expect off on
+off wireless-projection; expect off off; is_stock
+on wireless-projection; expect off on
+on cluster-directions; expect on on; is_leafia
+off wireless-projection; expect on off
+off cluster-directions; expect off off; is_stock
+on cluster-directions; on wireless-projection
+off wireless-projection; expect on off
+off cluster-directions; expect off off; is_stock
+on wireless-projection; on cluster-directions
+off cluster-directions; expect off on
+off wireless-projection; expect off off; is_stock
+declared
 
-echo "C. a failure while turning on is undone"
-mock; chmod 555 $M/system/onebin/cvev_us
-run wireless-projection enable fail
-chmod 755 $M/system/onebin/cvev_us; expect off off; is_stock
+echo "B. the car as Leafia left it: taken over, then turned off in either order"
+leafia_car() {
+    mock
+    for d in projection.tbt wireless.carplay.bt carplay.wifi.audio projection.menu; do cp -R "$STOCK/$d" "$M/data/nemesis/backup/"; done
+    as cluster-directions sh "$T/cluster-directions/enable.sh" >/dev/null 2>&1
+    as wireless-projection sh "$T/wireless-projection/enable.sh" >/dev/null 2>&1
+    # what Leafia's package did, without a record of it in the runner
+    rm -rf "$KT_JOURNAL" "$W/data"
+    : >"$KT_LOG"
+    sums >"$W/leafia"
+}
+leafia_car
+is_leafia; expect on on
+on cluster-directions fail
+on wireless-projection; unchanged "$W/leafia"
+on cluster-directions; unchanged "$W/leafia"; expect on on
+rm -rf "$M/data/nemesis/backup"   # taken over: Leafia's backups aren't needed any more
+off wireless-projection; expect on off
+off cluster-directions; expect off off; is_stock
+leafia_car
+on wireless-projection; on cluster-directions; unchanged "$W/leafia"
+off cluster-directions; expect off on
+off wireless-projection; expect off off; is_stock
+declared
+
+echo "C. a failure while turning on: turning off puts back what was changed"
+mock
+KT_TEST_FAIL=/system/onebin/cvev_us/featurexml.cfg on wireless-projection fail
+off wireless-projection; expect off off; is_stock
 
 echo "D. a file changed by something else is left alone"
-mock; echo x >> $M/system/lib/libCarPlayAudio.so
-run wireless-projection enable fail; expect off error
+mock
+chmod u+w "$M/system/lib"; echo x >>"$M/system/lib/libCarPlayAudio.so"; chmod u-w "$M/system/lib"
+sums >"$W/changed"
+on wireless-projection fail; expect off error; unchanged "$W/changed"
 
 echo "E. adb-tcp-hotspot: the ifconfig wrapper in and out"
 mock
-printf '#!/bin/sh\necho "toolbox $*" >> %s/toolbox.log\n' "$M" > $M/system/bin/toolbox; chmod 755 $M/system/bin/toolbox
-ln -s toolbox $M/system/bin/ifconfig
-printf '#!/bin/sh\necho "eth0     UP    192.168.0.123/24  0x00001043 0a:d0:0d:00:0b:ad"\n' > "$W/stubs/netcfg"; chmod 755 "$W/stubs/netcfg"
+chmod u+w "$M/system/bin"
+printf '#!/bin/sh\necho "toolbox $*" >> %s/toolbox.log\n' "$M" >"$M/system/bin/toolbox"
+chmod 755 "$M/system/bin/toolbox"
+ln -s toolbox "$M/system/bin/ifconfig"
+chmod u-w "$M/system/bin"
+printf '#!/bin/sh\necho "eth0     UP    192.168.0.123/24  0x00001043 0a:d0:0d:00:0b:ad"\n' >"$W/stubs/netcfg"
+chmod 755 "$W/stubs/netcfg"
 A=$T/adb-tcp-hotspot
-case "$(sh $A/status.sh)" in "off ADB TCP is blocking"*) ok "status off (clash seen)" ;; *) bad "status: $(sh $A/status.sh)" ;; esac
-run adb-tcp-hotspot enable
-[ ! -h $M/system/bin/ifconfig ] && cmp -s $M/system/bin/ifconfig $HERE/package/lib/ifconfig && ok "wrapper installed" || bad "wrapper not installed"
-[ "$(cat $M/props/ctl.start 2>/dev/null)" = set_adb_ip ] && ok "stock set_adb_ip re-run through the wrapper" || bad "set_adb_ip not re-run"
-case "$(sh $A/status.sh)" in on*) ok "status on" ;; *) bad "status: $(sh $A/status.sh)" ;; esac
+case "$(as adb-tcp-hotspot sh "$A/status.sh")" in "off ADB TCP is blocking"*) ok "status off (clash seen)" ;; *) bad "status: $(as adb-tcp-hotspot sh "$A/status.sh")" ;; esac
+on adb-tcp-hotspot
+if [ ! -h "$M/system/bin/ifconfig" ] && cmp -s "$M/system/bin/ifconfig" "$HERE/package/lib/ifconfig" && [ -x "$M/system/bin/ifconfig" ]; then
+    ok "wrapper installed, executable"
+else
+    bad "wrapper not installed"
+fi
+if grep -qx 'adb-tcp-hotspot service start set_adb_ip' "$KT_LOG"; then ok "stock set_adb_ip re-run through the wrapper"; else bad "set_adb_ip not re-run"; fi
+case "$(as adb-tcp-hotspot sh "$A/status.sh")" in on*) ok "status on" ;; *) bad "status: $(as adb-tcp-hotspot sh "$A/status.sh")" ;; esac
 # the wrapper itself: only the stock call changes
-sed 's#/system/bin/toolbox#'$M'/system/bin/toolbox#' $HERE/package/lib/ifconfig > "$W/ifc"
-: > $M/toolbox.log; sh "$W/ifc" eth0 192.168.0.123; sh "$W/ifc" usb0 up; sh "$W/ifc" eth0 192.168.0.123 netmask 255.255.255.255
-printf 'toolbox ifconfig eth0 192.168.0.123 netmask 255.255.255.255\ntoolbox ifconfig usb0 up\ntoolbox ifconfig eth0 192.168.0.123 netmask 255.255.255.255\n' | diff - $M/toolbox.log > /dev/null \
-    && ok "wrapper: /32 for set_adb_ip's call, everything else unchanged" || { bad "wrapper calls"; cat $M/toolbox.log; }
-run adb-tcp-hotspot disable
-[ -h $M/system/bin/ifconfig ] && [ "$(readlink $M/system/bin/ifconfig)" = toolbox ] && ok "toolbox link back" || bad "link not restored"
+sed "s#/system/bin/toolbox#$M/system/bin/toolbox#" "$HERE/package/lib/ifconfig" >"$W/ifc"
+: >"$M/toolbox.log"
+sh "$W/ifc" eth0 192.168.0.123
+sh "$W/ifc" usb0 up
+sh "$W/ifc" eth0 192.168.0.123 netmask 255.255.255.255
+if printf 'toolbox ifconfig eth0 192.168.0.123 netmask 255.255.255.255\ntoolbox ifconfig usb0 up\ntoolbox ifconfig eth0 192.168.0.123 netmask 255.255.255.255\n' | diff - "$M/toolbox.log" >/dev/null; then
+    ok "wrapper: /32 for set_adb_ip's call, everything else unchanged"
+else
+    bad "wrapper calls"
+    cat "$M/toolbox.log"
+fi
+off adb-tcp-hotspot
+if [ -h "$M/system/bin/ifconfig" ] && [ "$(readlink "$M/system/bin/ifconfig")" = toolbox ]; then ok "toolbox link back"; else bad "link not restored"; fi
 rm -f "$W/stubs/netcfg"
+declared
 
-[ $FAILS = 0 ] && echo "all passed" || { echo "$FAILS failed"; exit 1; }
+echo "F. aa-reconnect: restarts the receiver on a stuck loop, not on old lines arriving at once"
+mock
+stuck='E/AAProjection( 1234): current Already AA Starting mode'
+# old lines, all at once
+printf '#!/bin/sh\nfor i in 1 2 3 4 5 6 7 8; do echo "%s"; done\n' "$stuck" >"$W/logcat"
+# the loop as it happens: a line every second
+printf '#!/bin/sh\nfor i in 1 2 3 4 5 6 7; do echo "%s"; /bin/sleep 1; done\n' "$stuck" >"$W/logcat-live"
+chmod 755 "$W/logcat" "$W/logcat-live"
+# run.sh's "watching again in 10 s" ends the test run
+cat >"$W/stubs/sleep" <<'EOF'
+#!/bin/sh
+kill $PPID
+EOF
+chmod 755 "$W/stubs/sleep"
+KT_TEST_LOGCAT=$W/logcat as aa-reconnect sh "$T/aa-reconnect/run.sh" >/dev/null 2>&1 || true
+if grep -q ' kill ' "$KT_LOG"; then bad "restarted on old lines"; else ok "old lines in one burst: left alone"; fi
+KT_TEST_LOGCAT=$W/logcat-live as aa-reconnect sh "$T/aa-reconnect/run.sh" >/dev/null 2>&1 || true
+if grep -qx 'aa-reconnect kill com.google.android.projection.sink' "$KT_LOG"; then ok "stuck receiver restarted through kt"; else bad "receiver not restarted"; fi
+case "$(as aa-reconnect sh "$T/aa-reconnect/status.sh")" in "on restarted the stuck Android Auto receiver"*) ok "status: $(as aa-reconnect sh "$T/aa-reconnect/status.sh")" ;; *) bad "status: $(as aa-reconnect sh "$T/aa-reconnect/status.sh")" ;; esac
+printf '#!/bin/sh\nexit 0\n' >"$W/stubs/sleep"
+declared
+
+if [ $FAILS = 0 ]; then echo "all passed"; else
+    echo "$FAILS failed"
+    exit 1
+fi

@@ -3,7 +3,7 @@
  * A Java version of the recipe check/apply of HMG Leafia Plus's lpatch (tools/lpatch/lpatch.c,
  * GPL-3.0-or-later, https://github.com/VysseCodes/HMG-Leafia-Plus).
  */
-package dev.cabinwright.tweaks.projection.patch;
+package app.cabinwright.tweaks.projection.patch;
 
 import java.io.File;
 import java.io.IOException;

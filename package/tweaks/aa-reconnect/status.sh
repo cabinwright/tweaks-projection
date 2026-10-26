@@ -1,11 +1,14 @@
 #!/system/bin/sh
-# One line for tweaksd: on|off|error <text>. Shows run.sh's last action, if any.
-L=/data/nemesis/tweaks.projection/last/aa-reconnect
-if [ -s $L ]; then
-    read -r when what < $L
+# One line: on|off|error <text>. Shows run.sh's last action, if any.
+L=$TWEAK_DATA/last
+if [ -s "$L" ]; then
+    read -r when what < "$L"
     ago=$(( ($(date +%s) - when) / 60 ))
     # before the clock is set at start-up, times are meaningless
-    [ "$when" -lt 1577836800 ] && at="at start-up" || { [ $ago -lt 120 ] && at="$ago min ago" || at="$((ago / 60)) h ago"; }
+    if [ "$when" -lt 1577836800 ]; then at="at start-up"
+    elif [ $ago -lt 120 ]; then at="$ago min ago"
+    else at="$((ago / 60)) h ago"
+    fi
     echo "on $what ($at)"
 else
     echo "on watching the Android Auto receiver"

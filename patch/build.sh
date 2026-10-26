@@ -1,5 +1,5 @@
 #!/bin/sh
-# Builds the pack's on-car patch tool (dev.cabinwright.tweaks.projection.patch.Main) into a dex jar for
+# Builds the pack's on-car patch tool (app.cabinwright.tweaks.projection.patch.Main) into a dex jar for
 # app_process. Adapted from Tweaks' patch/build.sh (MIT).
 # usage: patch/build.sh <out.jar>
 set -e
@@ -12,10 +12,9 @@ ANDROID_JAR=$SDK/platforms/android-23/android.jar
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 mkdir "$WORK/c" "$WORK/d"
-javac -source 8 -target 8 -Xlint:-options -bootclasspath "$ANDROID_JAR" -d "$WORK/c" \
-    $(find "$HERE/src" -name '*.java')
-"$BUILD_TOOLS/d8" --release --min-api 19 --lib "$ANDROID_JAR" --output "$WORK/d" \
-    $(find "$WORK/c" -name '*.class')
+find "$HERE/src" -name '*.java' >"$WORK/sources"
+javac -source 8 -target 8 -Xlint:-options -bootclasspath "$ANDROID_JAR" -d "$WORK/c" "@$WORK/sources"
+find "$WORK/c" -name '*.class' -exec "$BUILD_TOOLS/d8" --release --min-api 19 --lib "$ANDROID_JAR" --output "$WORK/d" {} +
 mkdir -p "$(dirname "$OUT")"
 rm -f "$OUT"
 # app_process needs a jar (a bare .dex has no classes.dex entry for dalvik to cache)

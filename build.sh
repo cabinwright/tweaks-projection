@@ -1,12 +1,9 @@
 #!/bin/sh
-# Builds the tweaks.projection NEMESIS package (a tweak pack for cabinwright.tweaks):
-# dist/tweaks.projection.zip from package/ (NEMESIS.data, tweaks/<id>/, lib/) and the patch
-# tool (patch/, into lib/projpatch.jar). Needs the Android SDK (build-tools 29.0.2, platform 23)
-# and a JDK for that, plus zip. lib/leafia/libev6aac.so is committed, not rebuilt (it is built
-# from native/ev6aac/ with clang + lld).
-# Install over ADB (cabinwright.tweaks 1.4 or newer must be installed; its tweaksd runs the tweaks):
-#   adb push dist/tweaks.projection.zip /data/local/tmp/
-#   adb shell "nemesis install [--update] /data/local/tmp/tweaks.projection.zip"
+# Builds the tweaks.projection package (a tweak pack, installed from the Cabinwright store,
+# whose runner runs its tweaks): dist/tweaks.projection.zip from package/ (NEMESIS.data,
+# tweaks/<id>/, lib/) and the patch tool (patch/, into lib/projpatch.jar). Needs the Android SDK
+# (build-tools 29.0.2, platform 23) and a JDK for that, plus zip. lib/leafia/libev6aac.so is
+# committed, not rebuilt (it is built from native/ev6aac/ with clang + lld).
 set -e
 ROOT=$(cd "$(dirname "$0")" && pwd)
 P=$ROOT/package
@@ -17,6 +14,7 @@ if grep -rnE '(^[[:space:]]*|[|;&(][[:space:]]*|\$\([[:space:]]*)(printf|sed|awk
     echo "build.sh: a command the head unit doesn't have, in the scripts above" >&2
     exit 1
 fi
+sh "$ROOT/tools/check-tweaks.sh" "$P" || exit 1
 # the payload must be the files the scripts' checksums expect
 [ "$(md5of "$P/lib/leafia/libev6aac.so")" = badc26bd4c40a1c3e543b733a8ec5028 ] || { echo "build.sh: libev6aac.so isn't Leafia's build" >&2; exit 1; }
 for f in androidauto_wireless:fa91812d3eeee415768018ab6ee6804a carplay_wireless:95ff801a064526de56059dba10960b05; do

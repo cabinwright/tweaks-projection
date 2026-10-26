@@ -2,12 +2,12 @@
  * projpatch: the patch tool of the tweaks.projection pack. AGPL-3.0-or-later (see LICENSE),
  * Copyright (c) 2026 hazptr.
  *
- * md5, delta and zipadd are copied from Tweaks' tweakpatch (dev.cabinwright.tweaks.patch.Main,
+ * md5, delta and zipadd are copied from Tweaks' tweakpatch (app.cabinwright.tweaks.patch.Main,
  * MIT License, Copyright (c) 2026 hazptr). lpzipadd and the recipe commands (Recipe.java)
  * follow HMG Leafia Plus's lpatch (tools/lpatch/lpatch.c, GPL-3.0-or-later,
  * https://github.com/VysseCodes/HMG-Leafia-Plus): same formats, rules and results.
  */
-package dev.cabinwright.tweaks.projection.patch;
+package app.cabinwright.tweaks.projection.patch;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -25,9 +25,10 @@ import java.util.zip.Inflater;
 
 /**
  * Rebuilds patched system files on the head unit from its own stock files, so nothing of
- * The manufacturer's is shipped. Run as root with app_process:
+ * the manufacturer's is shipped. Run with app_process, as the tweak's own uid, with its dalvik
+ * cache in a folder that uid can write:
  *
- *   CLASSPATH=projpatch.jar app_process /system/bin dev.cabinwright.tweaks.projection.patch.Main <command> ...
+ *   ANDROID_DATA=<dir> CLASSPATH=projpatch.jar app_process /system/bin app.cabinwright.tweaks.projection.patch.Main <command> ...
  *
  *   md5 <file>                      print the file's md5
  *   delta <patch.lpd> <src> <dst>   rebuild dst from src (HMG Leafia Plus's .lpd format:

@@ -1,6 +1,6 @@
 #!/system/bin/sh
-# Turn off: put the stock files back from the backup (see lib/projection.sh). Never reboots;
-# exit 0 = off.
-D=${0%/*}
-. $D/../../lib/projection.sh
-turn wireless off wireless-projection
+# Turn off: the runner puts every file and property this tweak changed back. This only notes
+# that the change shows after the next start (status.sh).
+D=${TWEAK_DIR:-${0%/*}}
+. "$D/../../lib/projection.sh"
+mark_pending

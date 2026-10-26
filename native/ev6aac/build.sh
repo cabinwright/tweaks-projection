@@ -14,6 +14,7 @@
 # No libc or NDK is needed: the library only imports a few functions from the head
 # unit's libc.so, libdl.so and liblog.so, so tiny stub libraries with those names
 # are linked in to record them as dependencies.
+# shellcheck disable=SC2086 # $T is a list of compiler flags
 set -e
 HERE=$(cd "$(dirname "$0")" && pwd)
 OUT=${1:-$(pwd)/libev6aac.so}

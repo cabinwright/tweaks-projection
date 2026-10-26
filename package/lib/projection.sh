@@ -16,23 +16,28 @@
 # HKMC_DiPO and Iap2ServerApp are shared: their bridge build is made on top of the
 # turn-by-turn build (Leafia has no bridge build without it). They are stock with both tweaks
 # off, the turn-by-turn build with only cluster-directions on, and the bridge build whenever
-# wireless-projection is on.
+# wireless-projection is on. The runner keeps one stack of changes per file, so each tweak puts
+# its own build in its place in that stack: wireless-projection's bridge build goes on top of
+# cluster-directions' turn-by-turn build, and cluster-directions turned on while the bridge
+# build is in puts its build under it (kt file replace --under). Turning either off leaves the
+# other's build in place.
 #
-# Nothing of the head unit's is shipped (lib/leafia/): every changed file is rebuilt here from the car's
-# own stock copy with this pack's projpatch (patch/), from Leafia's deltas (.lpd) and byte recipes, and checked
-# against the md5 Leafia's own build gives, before and after it is written. The stock files are
-# backed up first (B below), taken from Leafia's own backups when its package put them there,
-# and turning a tweak off puts the exact stock bytes back. Never reboots.
+# Nothing of the head unit's is shipped (lib/leafia/): every changed file is rebuilt in
+# $TWEAK_DATA from the car's own stock copy with this pack's projpatch (patch/), from Leafia's
+# deltas (.lpd) and byte recipes, and checked against the md5 Leafia's own build gives before kt
+# puts it in place. The runner keeps the stock files and puts them back when a tweak is turned
+# off. A file that Leafia's package already changed is taken over instead (lib/projection-adopt.sh).
+# Never reboots.
 #
 # Derived from the scripts of HMG Leafia Plus (packages/wireless-carplay-aa, GPL-3.0,
 # https://github.com/VysseCodes/HMG-Leafia-Plus), which build on the NEMESIS community packages
 # wireless.projection and projection.tbt (AGPL-3.0). See NOTICE.md.
 #
-# Head unit shell: mksh, no sed/awk/head/printf. KT_TEST_ROOT runs it against a copy of the
-# file system (host tests only).
+# Runs as the tweak's own uid: reads /system, writes only $TWEAK_DATA, and changes the head unit
+# only through kt. Head unit shell: mksh, no sed/awk/head/printf. KT_TEST_ROOT runs it against a
+# copy of the file system (host tests only).
 R=${KT_TEST_ROOT:-}
-export PATH=/data/nemesis/bin:/sbin:/vendor/bin:/system/sbin:/system/bin:/system/xbin
-[ -n "$R" ] && PATH=$KT_TEST_PATH:$PATH
+PATH=$PATH:/sbin:/vendor/bin:/system/sbin:/system/bin:/system/xbin
 export LD_LIBRARY_PATH=/vendor/lib:/system/lib
 export ANDROID_ROOT=/system ANDROID_ASSETS=/system/app
 export BOOTCLASSPATH=/system/framework/core.jar:/system/framework/conscrypt.jar:/system/framework/okhttp.jar:/system/framework/core-junit.jar:/system/framework/bouncycastle.jar:/system/framework/ext.jar:/system/framework/framework.jar:/system/framework/framework2.jar:/system/framework/telephony-common.jar:/system/framework/voip-common.jar:/system/framework/mms-common.jar:/system/framework/android.policy.jar:/system/framework/services.jar:/system/framework/apache-xml.jar:/system/framework/webviewchromium.jar:/system/framework/automotive.jar
@@ -40,14 +45,8 @@ export BOOTCLASSPATH=/system/framework/core.jar:/system/framework/conscrypt.jar:
 LIB=$D/../../lib                               # this pack's lib/ (tweaks.projection)
 P=$LIB/leafia                                  # Leafia's patch data
 KP=$LIB/projpatch.jar                          # this pack's patch tool (patch/)
-B=$R/data/nemesis/backup/tweaks.projection     # our stock backup
-LB=$R/data/nemesis/backup                      # Leafia's backups: projection.tbt, wireless.carplay.bt,
-                                               # carplay.wifi.audio, projection.menu
-STATE=$R/data/nemesis/tweaks.projection        # <id>.pending
-WORK=$STATE/work
-NEMESIS=$R/system/xbin/nemesis
+WORK=$TWEAK_DATA/work
 DEXOPT=$R/system/bin/dexopt
-FX=$R/system/onebin/cvev_us/featurexml.cfg     # ro.mobis.targetdir on this firmware
 PROPS="persist.sys.iap2.wifi persist.iap2.iden.wireless"
 
 # md5 of each file: stock (firmware CVEV.USA.0000.V015.012.260507) and as Leafia builds it
@@ -89,29 +88,19 @@ known() {   # <name> <stock|tbt|bridge|menu|ours>
 # where each file lives
 live() {
     case "$1" in
-        *.apk|*.odex) echo "$R/system/app/$1" ;;
-        *.so) echo "$R/system/lib/$1" ;;
-        featurexml.cfg) echo "$FX" ;;
-        *_wireless.xml) echo "$R/system/etc/permissions/com.hkmc.software.connectivity.$1" ;;
+        *.apk|*.odex) echo "/system/app/$1" ;;
+        *.so) echo "/system/lib/$1" ;;
+        featurexml.cfg) echo /system/onebin/cvev_us/featurexml.cfg ;;   # ro.mobis.targetdir on this firmware
+        *_wireless.xml) echo "/system/etc/permissions/com.hkmc.software.connectivity.$1" ;;
     esac
 }
 
-# Leafia's stock copy of a file, where its package backed one up
-leafia_backup() {
-    case "$1" in
-        HKMC_GPM.*|HKMC_Navi_ExSL.*|HKMC_DiPO.*|Iap2ServerApp.*|libautoreceiver_infobank.so) echo "$LB/projection.tbt/$1" ;;
-        libCarPlayCore.so) echo "$LB/wireless.carplay.bt/$1" ;;
-        libCarPlayAudio.so|libCarPlayUtils.so) echo "$LB/carplay.wifi.audio/$1" ;;
-        HKMC_BtSettings.*) echo "$LB/projection.menu/$1" ;;
-    esac
-}
-
-sum() { [ -f "$1" ] && md5 "$1" 2>/dev/null | while read -r s f; do echo "$s"; done; }
+sum() { [ -f "$1" ] && md5 "$1" 2>/dev/null | while read -r s _; do echo "$s"; done; }
 
 # state of a live file: one of the names known() has for it, absent, or other
 state() {
     local f s v
-    f=$(live "$1")
+    f=$R$(live "$1")
     [ -e "$f" ] || { echo absent; return; }
     s=$(sum "$f")
     for v in stock tbt bridge menu ours; do
@@ -124,156 +113,115 @@ prop_state() {   # on (both t), off (neither is t), mixed
     local p v on=0 n=0
     for p in $PROPS; do
         n=$((n + 1))
-        v=$(getprop $p)
+        v=$(getprop "$p")
         case "$v" in t|T) on=$((on + 1)) ;; esac
     done
-    [ $on = $n ] && echo on || { [ $on = 0 ] && echo off || echo mixed; }
+    if [ $on = $n ]; then echo on; elif [ $on = 0 ]; then echo off; else echo mixed; fi
 }
 
 say() { echo "$1"; }
 fail() {
     echo "FAIL: $1"
-    $NEMESIS remount ro >/dev/null 2>&1
     rm -rf "$WORK"
     exit 1
 }
 
-# ---- backups
+# a change made during this boot only shows after a restart
+mark_pending() { cat /proc/sys/kernel/random/boot_id > "$TWEAK_DATA/pending"; }
+pending() { [ -f "$TWEAK_DATA/pending" ] && [ "$(cat "$TWEAK_DATA/pending")" = "$(cat /proc/sys/kernel/random/boot_id)" ]; }
 
-backup_ok() { [ "$(sum "$B/$1")" = "$(known "$1" stock)" ]; }
+. "$LIB/projection-adopt.sh"
 
-# a stock copy of <name> in $B: kept if there, else from Leafia's backup, else from /system
-ensure_backup() {
-    local src
-    backup_ok "$1" && return 0
-    mkdir -p "$B" || return 1
-    for src in "$(leafia_backup "$1")" "$(live "$1")"; do
-        [ -n "$src" ] && [ "$(sum "$src")" = "$(known "$1" stock)" ] || continue
-        cp "$src" "$B/$1.tmp" && mv "$B/$1.tmp" "$B/$1" || { rm -f "$B/$1.tmp"; return 1; }
-        backup_ok "$1" && { say "backed up stock $1 (from $src)"; return 0; }
-    done
-    rm -f "$B/$1"
-    echo "FAIL: no stock copy of $1 (not on /system, not in $B or Leafia's backups)"
-    return 1
-}
+# ---- building, in $WORK (nothing on the head unit changes)
 
-# a stock copy exists somewhere (cheap: no checksums; status.sh uses it)
-has_backup() {
-    [ -s "$B/$1" ] || { local l; l=$(leafia_backup "$1"); [ -n "$l" ] && [ -s "$l" ]; }
-}
-
-# ---- building, in $WORK (nothing on /system changes)
-
-# the patch tool runs in its own dalvik (root here can't write /data/dalvik-cache)
+# the patch tool runs in its own dalvik, with its cache in $WORK
 kp() {
     if [ -n "$KT_TEST_KP" ]; then $KT_TEST_KP "$@"; return; fi
-    ANDROID_DATA=$WORK/data CLASSPATH=$KP app_process /system/bin dev.cabinwright.tweaks.projection.patch.Main "$@"
+    ANDROID_DATA=$WORK/data CLASSPATH=$KP app_process /system/bin app.cabinwright.tweaks.projection.patch.Main "$@"
 }
 
-fresh_work() { rm -rf "$WORK" && mkdir -p "$WORK/data/dalvik-cache"; }
+# stock_src <name>: prints a stock copy of <name>: the live file when it is stock, else the
+# original the runner keeps for it (the other tweak of this pack changed it), copied into $WORK
+stock_src() {
+    local f
+    f=$R$(live "$1")
+    if [ "$(sum "$f")" = "$(known "$1" stock)" ]; then echo "$f"; return 0; fi
+    kt file original "$(live "$1")" "$WORK/$1.stock" >/dev/null 2>&1 \
+        && [ "$(sum "$WORK/$1.stock")" = "$(known "$1" stock)" ] && echo "$WORK/$1.stock"
+}
 
-# build_app <App> <tbt|bridge|menu>: $WORK/<App>.apk from the stock apk and odex
+# build_app <App> <tbt|bridge|menu>: $WORK/<App>.apk and its optimized $WORK/<App>.odex, from the
+# stock apk and odex
 build_app() {
-    local lpd
+    local lpd apk odex
     case "$2" in
         menu) lpd=$P/HKMC_BtSettings.menu.9096dec5.lpd ;;
         *) lpd=$P/ev6/$1.$2.lpd ;;
     esac
-    ensure_backup "$1.apk" && ensure_backup "$1.odex" || return 1
+    apk=$(stock_src "$1.apk") || { echo "FAIL: no stock copy of $1.apk"; return 1; }
+    odex=$(stock_src "$1.odex") || { echo "FAIL: no stock copy of $1.odex"; return 1; }
     rm -f "$WORK/classes.dex"
-    kp delta "$lpd" "$B/$1.odex" "$WORK/classes.dex" || { echo "FAIL: rebuilding $1 ($2)"; return 1; }
-    kp lpzipadd "$B/$1.apk" "$WORK/classes.dex" "$WORK/$1.apk" || { echo "FAIL: packing $1.apk"; return 1; }
-    rm -f "$WORK/classes.dex"
+    kp delta "$lpd" "$odex" "$WORK/classes.dex" || { echo "FAIL: rebuilding $1 ($2)"; return 1; }
+    kp lpzipadd "$apk" "$WORK/classes.dex" "$WORK/$1.apk" || { echo "FAIL: packing $1.apk"; return 1; }
+    rm -f "$WORK/classes.dex" "$WORK/$1.apk.stock" "$WORK/$1.odex.stock"
     [ "$(sum "$WORK/$1.apk")" = "$(known "$1.apk" "$2")" ] || { echo "FAIL: rebuilt $1.apk isn't Leafia's $2 build"; return 1; }
+    rm -f "$WORK/$1.odex"
+    if ! "$DEXOPT" --preopt "$WORK/$1.apk" "$WORK/$1.odex" "m=y,u=n" >/dev/null 2>&1 || [ ! -s "$WORK/$1.odex" ]; then
+        echo "FAIL: dexopt for $1"
+        return 1
+    fi
     say "built $1 ($2)"
 }
 
 # build_lib <lib>: $WORK/<lib> from the stock library
 build_lib() {
-    local want
-    ensure_backup "$1" || return 1
+    local src want
+    src=$(stock_src "$1") || { echo "FAIL: no stock copy of $1"; return 1; }
     case "$1" in
-        libautoreceiver_infobank.so) want=tbt; kp delta "$P/libautoreceiver_infobank.tbt.lpd" "$B/$1" "$WORK/$1" ;;
-        libCarPlayCore.so) want=ours; kp apply "$P/carplay-core-wifi.recipe" "$B/$1" "$WORK/$1" ;;
-        libCarPlayAudio.so) want=ours; kp apply "$P/carplay-audio-formats.recipe" "$B/$1" "$WORK/$1" ;;
-        libCarPlayUtils.so) want=ours; kp apply "$P/carplay-utils-converter.recipe" "$B/$1" "$WORK/$1" ;;
+        libautoreceiver_infobank.so) want=tbt; kp delta "$P/libautoreceiver_infobank.tbt.lpd" "$src" "$WORK/$1" ;;
+        libCarPlayCore.so) want=ours; kp apply "$P/carplay-core-wifi.recipe" "$src" "$WORK/$1" ;;
+        libCarPlayAudio.so) want=ours; kp apply "$P/carplay-audio-formats.recipe" "$src" "$WORK/$1" ;;
+        libCarPlayUtils.so) want=ours; kp apply "$P/carplay-utils-converter.recipe" "$src" "$WORK/$1" ;;
     esac || { echo "FAIL: patching $1"; return 1; }
+    rm -f "$WORK/$1.stock"
     [ "$(sum "$WORK/$1")" = "$(known "$1" $want)" ] || { echo "FAIL: patched $1 isn't Leafia's build"; return 1; }
     say "built $1"
 }
 
-build_featurexml() {   # <on|off>
-    kp delta "$P/featurexml.$1.lpd" "$FX" "$WORK/featurexml.cfg" || { echo "FAIL: featurexml.cfg isn't the file this firmware has"; return 1; }
+build_featurexml() {   # <on|off>: $WORK/featurexml.cfg from the live one
+    kp delta "$P/featurexml.$1.lpd" "$R$(live featurexml.cfg)" "$WORK/featurexml.cfg" \
+        || { echo "FAIL: featurexml.cfg isn't the file this firmware has"; return 1; }
 }
 
-# ---- writing /system (between sys_rw and sys_ro)
+# ---- the plan: what to do, gathered first so that a check that fails changes nothing
 
-sys_rw() { $NEMESIS remount rw >/dev/null 2>&1 || fail "remount /system rw"; }
-sys_ro() { sync; $NEMESIS remount ro >/dev/null 2>&1; true; }
+STEPS=
+CHANGES=
+step() { STEPS="$STEPS $1:$2:$3"; }   # <put|app|under|adopt|appadopt|prop|propadopt> <name> [<file>]
 
-# put <src> <dst>: copy beside it, then rename over it (a running app keeps its old copy)
-put() {
-    rm -f "$2.kt"
-    cp "$1" "$2.kt" && chmod 644 "$2.kt" && mv "$2.kt" "$2" && cmp "$1" "$2" >/dev/null 2>&1 \
-        || { rm -f "$2.kt"; echo "FAIL: writing $2"; return 1; }
-}
-
-# install_app <App>: $WORK/<App>.apk in place, its odex re-optimized
-install_app() {
-    local apk odex
-    apk=$(live "$1.apk"); odex=$(live "$1.odex")
-    put "$WORK/$1.apk" "$apk" || return 1
-    rm -f "$odex"
-    if $DEXOPT --preopt "$apk" "$odex" "m=y,u=n" >/dev/null 2>&1 && [ -s "$odex" ]; then
-        chmod 644 "$odex"
-    else
-        rm -f "$odex"
-        say "dexopt failed for $1 - the next start optimizes it"
-    fi
-    say "installed $1"
-}
-
-restore_app() {   # <App>: the stock apk and odex from the backup
-    ensure_backup "$1.apk" && ensure_backup "$1.odex" || return 1
-    put "$B/$1.apk" "$(live "$1.apk")" && put "$B/$1.odex" "$(live "$1.odex")" || return 1
-    say "restored stock $1"
-}
-
-restore_lib() {   # <lib>
-    ensure_backup "$1" || return 1
-    put "$B/$1" "$(live "$1")" || return 1
-    say "restored stock $1"
-}
-
-# best effort: a stale optimized copy in dalvik-cache (only there if dexopt ever failed)
-wipe_dalvik() {
-    local a c=
-    for a in "$@"; do c="$c /data/dalvik-cache/*@$a.apk@* /cache/dalvik-cache/*@$a.apk@*"; done
-    [ -n "$R" ] || $NEMESIS root 1000 -c "rm -f$c" >/dev/null 2>&1
-    true
-}
-
-props_on() {
-    local p
-    for p in $PROPS; do
-        setprop $p t
-        [ "$(getprop $p)" = t ] || { echo "FAIL: $p didn't take"; return 1; }
+run_steps() {
+    local s v n f
+    for s in $STEPS; do
+        v=${s%%:*}; s=${s#*:}; n=${s%%:*}; f=${s#*:}
+        case $v in
+            put) kt file replace "$(live "$n")" "$f" || return 1; CHANGES=1; say "installed $n" ;;
+            app)
+                kt file replace "$(live "$n.apk")" "$WORK/$n.apk" && kt file replace "$(live "$n.odex")" "$WORK/$n.odex" || return 1
+                CHANGES=1; say "installed $n" ;;
+            under)
+                kt file replace --under "$(live "$n.apk")" "$WORK/$n.apk" && kt file replace --under "$(live "$n.odex")" "$WORK/$n.odex" || return 1
+                say "kept the turn-by-turn build of $n for when wireless projection is turned off" ;;
+            adopt) kt file adopt "$(live "$n")" "$f" || return 1; say "took over $n" ;;
+            appadopt)
+                kt file adopt "$(live "$n.apk")" "$(leafia_stock "$n.apk")" && kt file adopt "$(live "$n.odex")" "$(leafia_stock "$n.odex")" || return 1
+                say "took over $n" ;;
+            prop)
+                if ! kt prop set "$n" t || [ "$(getprop "$n")" != t ]; then echo "FAIL: $n didn't take"; return 1; fi
+                CHANGES=1; say "$n on" ;;
+            propadopt) kt prop adopt "$n" "" || return 1; say "took over $n" ;;
+        esac
     done
-    say "iAP2 Wi-Fi properties on"
 }
-
-# back to unset, as on stock firmware (empty reads as off; the persist file goes too)
-props_off() {
-    local p
-    for p in $PROPS; do setprop $p ""; done
-    sleep 1
-    for p in $PROPS; do rm -f "$R/data/property/$p"; done
-    say "iAP2 Wi-Fi properties back to unset"
-}
-
-# a change made during this boot only shows after a restart
-mark_pending() { mkdir -p "$STATE" && cat /proc/sys/kernel/random/boot_id > "$STATE/$1.pending"; }
-pending() { [ -f "$STATE/$1.pending" ] && [ "$(cat "$STATE/$1.pending")" = "$(cat /proc/sys/kernel/random/boot_id)" ]; }
 
 # ---- the two tweaks' states, in $ST: on, off, partial (only some of the tweak's files are in; every
 # file is known) or error (a file is neither stock nor Leafia's build: $WHY names them)
@@ -319,137 +267,99 @@ wireless_state() {
     fi
 }
 
-# stock copies for turning a tweak off exist (no checksums: for status.sh)
-backups_for() {
+# ---- what turning each tweak on does, file by file: a file already in this tweak's state is
+# taken over, every other file is built and put in
+
+wireless_plan() {
     local n
-    for n in "$@"; do has_backup $n || return 1; done
-}
-WIRELESS_STOCK="HKMC_DiPO.apk HKMC_DiPO.odex Iap2ServerApp.apk Iap2ServerApp.odex HKMC_BtSettings.apk HKMC_BtSettings.odex libCarPlayCore.so libCarPlayAudio.so libCarPlayUtils.so"
-DIRECTIONS_STOCK="HKMC_GPM.apk HKMC_GPM.odex HKMC_Navi_ExSL.apk HKMC_Navi_ExSL.odex HKMC_DiPO.apk HKMC_DiPO.odex Iap2ServerApp.apk Iap2ServerApp.odex libautoreceiver_infobank.so"
-
-check_firmware() {
-    [ -n "$R" ] || [ "$(getprop ro.build.product)" = CVEV.USA.0000.V015.012.260507 ] || fail "made for other head unit software"
-}
-
-# ---- turning them on and off. *_build checks and builds into $WORK (no /system change);
-# *_install and *_remove run between sys_rw and sys_ro, file by file, skipping files that
-# are already where they should be, so a half-done run can be finished or undone.
-
-wireless_build() {
-    local n
-    for n in $WIRELESS_STOCK; do ensure_backup $n || return 1; done
-    W_APPS= W_LIBS= W_FX=
-    for n in Iap2ServerApp HKMC_DiPO; do
-        [ "$(state $n.apk)" = bridge ] || { build_app $n bridge || return 1; W_APPS="$W_APPS $n"; }
-    done
-    [ "$(state HKMC_BtSettings.apk)" = menu ] || { build_app HKMC_BtSettings menu || return 1; W_APPS="$W_APPS HKMC_BtSettings"; }
+    case $(state libev6aac.so) in
+        ours) step adopt libev6aac.so absent ;;
+        *)
+            [ "$(sum "$P/libev6aac.so")" = "$(known libev6aac.so ours)" ] || { echo "FAIL: libev6aac.so in the package is damaged"; return 1; }
+            step put libev6aac.so "$P/libev6aac.so" ;;   # first: the patched libCarPlayUtils looks for it by name
+    esac
     for n in libCarPlayUtils.so libCarPlayAudio.so libCarPlayCore.so; do
-        [ "$(state $n)" = ours ] || { build_lib $n || return 1; W_LIBS="$W_LIBS $n"; }
+        case $(state $n) in
+            ours) plan_adopt $n || return 1 ;;
+            *) build_lib $n || return 1; step put $n "$WORK/$n" ;;
+        esac
     done
-    [ "$(state featurexml.cfg)" = ours ] || { build_featurexml on || return 1; W_FX=1; }
-    [ "$(sum "$P/libev6aac.so")" = "$(known libev6aac.so ours)" ] || { echo "FAIL: libev6aac.so in the package is damaged"; return 1; }
-}
-
-wireless_install() {
-    local n
-    # the converter first: the patched libCarPlayUtils looks for it by name
-    if [ "$(state libev6aac.so)" != ours ]; then put "$P/libev6aac.so" "$(live libev6aac.so)" || return 1; say "installed libev6aac.so"; fi
-    for n in $W_LIBS; do put "$WORK/$n" "$(live $n)" || return 1; say "installed patched $n"; done
-    for n in $W_APPS; do install_app $n || return 1; done
-    for n in androidauto_wireless.xml carplay_wireless.xml; do
-        [ "$(state $n)" = ours ] || { put "$P/com.hkmc.software.connectivity.$n" "$(live $n)" || return 1; say "added $n"; }
-    done
-    if [ -n "$W_FX" ]; then put "$WORK/featurexml.cfg" "$FX" || return 1; say "wireless projection features on in featurexml.cfg"; fi
-    wipe_dalvik $W_APPS
-    [ "$(prop_state)" = on ] || props_on
-}
-
-# every wireless file back to stock; HKMC_DiPO and Iap2ServerApp to the turn-by-turn build
-# while cluster-directions is on
-wireless_remove() {
-    local n
-    mkdir -p "$WORK/data/dalvik-cache"
-    if [ "$(state featurexml.cfg)" = ours ]; then
-        build_featurexml off && put "$WORK/featurexml.cfg" "$FX" || return 1
-        say "stock featurexml.cfg"
-    fi
-    for n in androidauto_wireless.xml carplay_wireless.xml; do
-        [ "$(state $n)" = absent ] || { rm -f "$(live $n)" && say "removed $n" || return 1; }
-    done
-    for n in libCarPlayCore.so libCarPlayAudio.so libCarPlayUtils.so; do
-        [ "$(state $n)" = stock ] || restore_lib $n || return 1
-    done
-    [ "$(state libev6aac.so)" = absent ] || { rm -f "$(live libev6aac.so)" && say "removed libev6aac.so" || return 1; }
-    [ "$(state HKMC_BtSettings.apk)" = stock ] || restore_app HKMC_BtSettings || return 1
     for n in Iap2ServerApp HKMC_DiPO; do
-        [ "$(state $n.apk)" = bridge ] || continue
-        if [ "$(state HKMC_GPM.apk)" = tbt ]; then
-            build_app $n tbt && install_app $n || return 1
-        else
-            restore_app $n || return 1
-        fi
+        case $(state $n.apk) in
+            bridge) plan_adopt_app $n || return 1 ;;
+            tbt)
+                [ -n "$(stock_src $n.apk)" ] || {
+                    echo "FAIL: $n has the turn-by-turn build from HMG Leafia Plus: turn on Navigation directions in the instrument cluster first"
+                    return 1
+                }
+                build_app $n bridge || return 1; step app $n ;;
+            *) build_app $n bridge || return 1; step app $n ;;
+        esac
     done
-    wipe_dalvik HKMC_BtSettings Iap2ServerApp HKMC_DiPO
-    [ "$(prop_state)" = off ] || props_off
+    case $(state HKMC_BtSettings.apk) in
+        menu) plan_adopt_app HKMC_BtSettings || return 1 ;;
+        *) build_app HKMC_BtSettings menu || return 1; step app HKMC_BtSettings ;;
+    esac
+    for n in androidauto_wireless.xml carplay_wireless.xml; do
+        case $(state $n) in
+            ours) step adopt $n absent ;;
+            *) step put $n "$P/com.hkmc.software.connectivity.$n" ;;
+        esac
+    done
+    case $(state featurexml.cfg) in
+        ours) build_featurexml off || return 1; step adopt featurexml.cfg "$WORK/featurexml.cfg" ;;
+        *) build_featurexml on || return 1; step put featurexml.cfg "$WORK/featurexml.cfg" ;;
+    esac
+    for n in $PROPS; do
+        case $(getprop "$n") in
+            t|T) step propadopt "$n" ;;   # set by Leafia's package; unset on stock firmware
+            *) step prop "$n" ;;
+        esac
+    done
 }
 
-directions_build() {
+directions_plan() {
     local n
-    for n in $DIRECTIONS_STOCK; do ensure_backup $n || return 1; done
-    D_APPS= D_LIB=
     for n in HKMC_GPM HKMC_Navi_ExSL; do
-        [ "$(state $n.apk)" = tbt ] || { build_app $n tbt || return 1; D_APPS="$D_APPS $n"; }
+        case $(state $n.apk) in
+            tbt) plan_adopt_app $n || return 1 ;;
+            *) build_app $n tbt || return 1; step app $n ;;
+        esac
     done
-    # with wireless-projection on, these already carry turn-by-turn (bridge build)
     for n in HKMC_DiPO Iap2ServerApp; do
-        [ "$(state $n.apk)" = stock ] && { build_app $n tbt || return 1; D_APPS="$D_APPS $n"; }
+        case $(state $n.apk) in
+            stock) build_app $n tbt || return 1; step app $n ;;
+            tbt) plan_adopt_app $n || return 1 ;;
+            bridge)
+                # wireless-projection's build, which has turn-by-turn in it: this tweak's build goes
+                # under it, for when wireless-projection is turned off
+                [ -n "$(stock_src $n.apk)" ] || {
+                    echo "FAIL: wireless CarPlay was set up by HMG Leafia Plus: turn on Wireless Android Auto and CarPlay first"
+                    return 1
+                }
+                build_app $n tbt || return 1; step under $n ;;
+        esac
     done
-    [ "$(state libautoreceiver_infobank.so)" = tbt ] || { build_lib libautoreceiver_infobank.so || return 1; D_LIB=1; }
-    true
+    case $(state libautoreceiver_infobank.so) in
+        tbt) plan_adopt libautoreceiver_infobank.so || return 1 ;;
+        *) build_lib libautoreceiver_infobank.so || return 1; step put libautoreceiver_infobank.so "$WORK/libautoreceiver_infobank.so" ;;
+    esac
 }
 
-directions_install() {
-    local n
-    for n in $D_APPS; do install_app $n || return 1; done
-    if [ -n "$D_LIB" ]; then put "$WORK/libautoreceiver_infobank.so" "$(live libautoreceiver_infobank.so)" || return 1; say "installed libautoreceiver_infobank.so (turn-by-turn)"; fi
-    wipe_dalvik $D_APPS
-}
-
-# turn-by-turn files back to stock; the bridge builds stay while wireless-projection is on
-directions_remove() {
-    local n
-    for n in HKMC_GPM HKMC_Navi_ExSL HKMC_DiPO Iap2ServerApp; do
-        [ "$(state $n.apk)" = tbt ] && { restore_app $n || return 1; }
-    done
-    [ "$(state libautoreceiver_infobank.so)" = stock ] || restore_lib libautoreceiver_infobank.so || return 1
-    wipe_dalvik HKMC_GPM HKMC_Navi_ExSL HKMC_DiPO Iap2ServerApp
-}
-
-# turn <wireless|directions> <on|off> <tweak id>: the whole enable.sh / disable.sh
+# turn <wireless|directions>: the whole enable.sh
 turn() {
-    local st want=$2
-    check_firmware
-    ${1}_state; st=$ST
-    [ "$st" = error ] && fail "files neither stock nor this tweak's:$WHY - leaving them alone"
-    [ "$st" = $want ] && { say "already $want"; exit 0; }
-    fresh_work || fail "can't make $WORK"
-    if [ $want = on ]; then
-        ${1}_build || fail "nothing changed"
-        sys_rw
-        if ! ${1}_install; then
-            echo "putting back what was changed"
-            ${1}_remove || echo "FAIL: couldn't put everything back - see above"
-            sys_ro
-            fail "turning on failed"
-        fi
-    else
-        sys_rw
-        ${1}_remove || fail "turning off failed"
-    fi
-    sys_ro
+    "${1}_state"
+    [ "$ST" = error ] && fail "files neither stock nor this tweak's:$WHY - leaving them alone"
+    { rm -rf "$WORK" && mkdir -p "$WORK/data/dalvik-cache"; } || fail "can't make $WORK"
+    "${1}_plan" || fail "nothing changed"
+    run_steps || fail "turning on stopped part way - turn it off to put back what changed"
     rm -rf "$WORK"
-    ${1}_state; st=$ST
-    [ "$st" = $want ] || fail "files are $st after the change:$WHY"
-    mark_pending $3
-    say "turned $want - restart the head unit to apply"
+    "${1}_state"
+    [ "$ST" = on ] || fail "files are $ST after the change:$WHY"
+    if [ -n "$CHANGES" ]; then
+        mark_pending
+        say "turned on - restart the head unit to apply"
+    else
+        say "already installed by HMG Leafia Plus's package: taken over, nothing changed"
+    fi
 }
