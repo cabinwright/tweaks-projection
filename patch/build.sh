@@ -1,6 +1,6 @@
 #!/bin/sh
-# Builds the pack's on-car patch tool (dev.kiatweaks.projection.patch.Main) into a dex jar for
-# app_process. Adapted from kia-tweaks' patch/build.sh (MIT).
+# Builds the pack's on-car patch tool (dev.cabinwright.tweaks.projection.patch.Main) into a dex jar for
+# app_process. Adapted from Tweaks' patch/build.sh (MIT).
 # usage: patch/build.sh <out.jar>
 set -e
 HERE=$(cd "$(dirname "$0")" && pwd)

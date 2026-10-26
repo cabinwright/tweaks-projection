@@ -53,7 +53,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           cat > "$RUNNER_TEMP/notes.md" <<NOTES
-          NEMESIS package \`tweaks.projection\` $VERSION, a tweak pack for kia-tweaks (needs kia.tweaks 1.2 or newer):
+          NEMESIS package \`tweaks.projection\` $VERSION, a tweak pack for Cabinwright tweaks (needs cabinwright.tweaks 1.4 or newer):
           install \`tweaks.projection-v$VERSION.zip\` with NEMESIS (\`nemesis install --update <zip>\` over ADB).
           Moving from HMG Leafia Plus's wireless.carplay.aa: see docs/migration.md.
           NOTES

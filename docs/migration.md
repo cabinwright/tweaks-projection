@@ -68,7 +68,7 @@ are why the steps below detach Leafia's package instead of undoing it.
 
 ## Steps
 
-**0. Prerequisites.** kia.tweaks 1.2 or newer (tweak pack support) installed and running.
+**0. Prerequisites.** cabinwright.tweaks 1.4 or newer (or kia.tweaks 1.2 or newer, its earlier name) installed and running.
 Build `dist/tweaks.projection.zip`.
 
 **1. Install the pack.** It has no install hooks, so nothing on `/system` changes.
@@ -88,8 +88,8 @@ system tweak's switch from its first reported state, so expect:
 | ADB TCP and wireless projection together | off: stock | off |
 | Reconnect wireless Android Auto | on (service, default on) | on |
 
-`Reconnect wireless Android Auto` starts at once. While kia-tweaks' `aa-recover` runs, it only
-logs and leaves restarts to it. Check `/data/nemesis/kia-tweaks/state.json`: both projection
+`Reconnect wireless Android Auto` starts at once. While Tweaks' `aa-recover` runs, it only
+logs and leaves restarts to it. Check `/data/nemesis/cabinwright/tweaks/state.json`: both projection
 tweaks should show `"want":"on","state":"on"`. If either shows `error`, stop here and roll back
 (uninstall the pack); nothing was changed.
 
@@ -118,11 +118,11 @@ where they are; they can be deleted later, since step 3 copied them.
 
 **5. ADB TCP fix.** In the Tweaks app, turn on **ADB TCP and wireless projection together**
 (it asks first). It replaces the `ifconfig` link at once, and if eth0 has the /24 right now it
-narrows it at once too. Then turn off kia-tweaks' **Wireless projection with ADB TCP**
+narrows it at once too. Then turn off Tweaks' **Wireless projection with ADB TCP**
 (`eth0-guard`). From then on the stock `set_adb_ip` gives eth0 a /32 at every start, so there's
 no gap.
 
-**6. Stuck-receiver fix.** Turn off kia-tweaks' **Fix wireless Android Auto not connecting**
+**6. Stuck-receiver fix.** Turn off Tweaks' **Fix wireless Android Auto not connecting**
 (`aa-recover`). The pack's **Reconnect wireless Android Auto** is already running and acts on
 the next stuck loop as soon as the old one has stopped, so there's no gap.
 
@@ -130,10 +130,10 @@ the next stuck loop as soon as the old one has stopped, so there's no gap.
 wireless Android Auto, wireless CarPlay with audio, directions in the cluster, and that all four
 tweaks still show "on".
 
-**8. kia-tweaks' next release** drops `eth0-guard` and `aa-recover`. If a car skipped steps 5 and
+**8. Tweaks' next release** (kia.tweaks 1.3) drops `eth0-guard` and `aa-recover`. If a car skipped steps 5 and
 6, the update still ends cleanly: tweaksd stops every running `run.sh` when it restarts and
 never starts tweaks whose folders are gone. The pack's `aa-reconnect` then stops deferring by
-itself. Turn on `adb-tcp-hotspot` before updating kia-tweaks, or eth0 is unguarded from the
+itself. Turn on `adb-tcp-hotspot` before updating Tweaks, or eth0 is unguarded from the
 next start.
 
 ## Rollback

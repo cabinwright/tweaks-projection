@@ -1,5 +1,5 @@
 #!/bin/sh
-# From HMG Leafia Plus, src/ev6aac/build.sh (GPL-3.0); see NOTICE.md. In kia-tweaks the shipped
+# From HMG Leafia Plus, src/ev6aac/build.sh (GPL-3.0); see NOTICE.md. In this pack the shipped
 # copy is package/lib/leafia/libev6aac.so (committed; the top-level build.sh doesn't rebuild it,
 # because this needs clang and lld). usage here: native/ev6aac/build.sh [output]
 # Build libev6aac.so (the AAC/Opus AudioConverter for wireless CarPlay audio).

@@ -1,9 +1,9 @@
 # tweaks-projection
 
-A tweak pack for [kia-tweaks](https://github.com/hazptr/kia-tweaks): wireless Android Auto and
+A tweak pack for [Cabinwright tweaks](https://github.com/cabinwright/tweaks): wireless Android Auto and
 CarPlay, phone navigation directions in the instrument cluster, and two fixes that keep wireless
 projection working. NEMESIS package `tweaks.projection`; its tweaks show up in the **Tweaks** app
-and kia-tweaks' `tweaksd` runs them. Written for the 2023 Kia EV6 (Gen5W, firmware
+and its `tweaksd` runs them. Written for the 2023 Kia EV6 (Gen5W, firmware
 `CVEV.USA.0000.V015.012.260507`) and matched to that firmware exactly.
 
 It is a port of what [HMG Leafia Plus](https://github.com/VysseCodes/HMG-Leafia-Plus)'s package
@@ -18,7 +18,8 @@ a car that runs Leafia's package can move to this pack without anything changing
 | ADB TCP and wireless projection together (`adb-tcp-hotspot`) | oneshot, system | The Engineering Mode "ADB TCP" switch no longer breaks wireless projection. |
 | Reconnect wireless Android Auto (`aa-reconnect`) | service | Restarts the Android Auto receiver when it gets stuck after the car's hotspot was used. |
 
-Needs kia-tweaks 1.2 or newer (tweak pack support in `tweaksd`).
+Needs cabinwright.tweaks 1.4 or newer. With kia.tweaks (its name before 1.4) the pack works
+the same, from kia.tweaks 1.2 on; the switch to cabinwright.tweaks leaves its tweaks as they are.
 
 ## What each tweak changes
 
@@ -44,7 +45,7 @@ four-line script that gives exactly that call a /32 netmask and passes everythin
 `toolbox`, so the clash never happens. Turning it off puts the link back.
 
 **Reconnect wireless Android Auto**: watches for the receiver's "Already AA Starting mode"
-loop and restarts it, as kia-tweaks' `aa-recover` did (which it replaces, see the migration).
+loop and restarts it, as Tweaks' `aa-recover` did (which it replaces, see the migration).
 
 ## How it works
 
@@ -63,12 +64,12 @@ pack over Leafia's install changes nothing.
 | Path | What |
 |---|---|
 | `package/NEMESIS.data` | `id=tweaks.projection`, no apps, no services |
-| `package/tweaks/<id>/` | `tweak.conf` and scripts (kia-tweaks' format) |
+| `package/tweaks/<id>/` | `tweak.conf` and scripts (the Tweaks format) |
 | `package/lib/projection.sh` | shared code of the two projection tweaks |
 | `package/lib/projection-adopt.sh` | copies Leafia's stock backups into this pack's backup |
 | `package/lib/leafia/` | Leafia's patch data, `libev6aac.so`, the two feature files |
 | `package/lib/ifconfig` | the wrapper `adb-tcp-hotspot` installs |
-| `patch/` | `projpatch`: md5, delta, zipadd (from kia-tweaks' kiapatch), lpzipadd, recipe check/apply |
+| `patch/` | `projpatch`: md5, delta, zipadd (from Tweaks' tweakpatch), lpzipadd, recipe check/apply |
 | `native/ev6aac/` | source of `libev6aac.so` (Leafia's, unchanged) |
 | `tests/host-test.sh` | runs every tweak against a mock `/system` on a computer |
 
@@ -89,7 +90,7 @@ sh tests/host-test.sh <stock dir>
 ```
 
 `<stock dir>` holds the car's stock files laid out like Leafia's backups (see the script). They
-are Kia's files, so keep them private. The test passes only if every result matches the
+are the manufacturer's files, so keep them private. The test passes only if every result matches the
 checksums Leafia's install has on the car, turning off restores `/system` byte for byte, a
 failed install is undone, and unknown files are left alone.
 

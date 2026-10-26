@@ -1,6 +1,6 @@
 /*
  * From HMG Leafia Plus, src/ev6aac/ (GPL-3.0, https://github.com/VysseCodes/HMG-Leafia-Plus),
- * unchanged; see NOTICE.md. kia-tweaks ships the build of it as package/lib/leafia/libev6aac.so.
+ * unchanged; see NOTICE.md. this pack ships the build of it as package/lib/leafia/libev6aac.so.
  */
 /*
  * libev6aac.so - a real AAC-LC -> PCM AudioConverter for the Gen5W CarPlay stack.

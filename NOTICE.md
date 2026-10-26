@@ -20,7 +20,7 @@ From it, taken from the tree at commit 9bd3027 (package v1.0.2 on the car):
 - `package/lib/leafia/libev6aac.so` (from `packages/wireless-carplay-aa/comp/4_audio/files/`),
   unchanged, and its source in `native/ev6aac/` (from `src/ev6aac/`), unchanged apart from a
   header naming where it comes from.
-- `patch/src/dev/kiatweaks/projection/patch/Recipe.java` and the `lpzipadd` command in
+- `patch/src/dev/cabinwright/tweaks/projection/patch/Recipe.java` and the `lpzipadd` command in
   `Main.java`: a Java version of the recipe check/apply and zipadd of Leafia's `lpatch`
   (`tools/lpatch/lpatch.c`, GPL-3.0-or-later), with the same formats and results.
 - `package/lib/projection.sh`: a rewrite of the install, uninstall and checksum logic of
@@ -56,10 +56,10 @@ under the AGPL-3.0, and so does this port of it:
   turn-by-turn deltas rebuild (`*.tbt.lpd`), and the base of the CarPlay bridge builds
   (`*.bridge.lpd`).
 
-## kia-tweaks (MIT)
+## Cabinwright tweaks (MIT)
 
-https://github.com/hazptr/kia-tweaks, Copyright (c) 2026 hazptr, MIT License. Copied from it:
-the `md5`, `delta` and `zipadd` commands of `patch/src/dev/kiatweaks/projection/patch/Main.java`
+https://github.com/cabinwright/tweaks, Copyright (c) 2026 hazptr, MIT License. Copied from it:
+the `md5`, `delta` and `zipadd` commands of `patch/src/dev/cabinwright/tweaks/projection/patch/Main.java`
 and `patch/build.sh` (from its `patch/`), and the `aa-reconnect` tweak (from its `aa-recover`).
 The two featurexml deltas were made with its `tools/mkdelta.py`, and `adb-tcp-hotspot` replaces
 its `eth0-guard` with a fix at the cause.

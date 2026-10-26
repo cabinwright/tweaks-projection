@@ -18,7 +18,7 @@
 # off, the turn-by-turn build with only cluster-directions on, and the bridge build whenever
 # wireless-projection is on.
 #
-# Nothing of Kia's is shipped (lib/leafia/): every changed file is rebuilt here from the car's
+# Nothing of the head unit's is shipped (lib/leafia/): every changed file is rebuilt here from the car's
 # own stock copy with this pack's projpatch (patch/), from Leafia's deltas (.lpd) and byte recipes, and checked
 # against the md5 Leafia's own build gives, before and after it is written. The stock files are
 # backed up first (B below), taken from Leafia's own backups when its package put them there,
@@ -167,7 +167,7 @@ has_backup() {
 # the patch tool runs in its own dalvik (root here can't write /data/dalvik-cache)
 kp() {
     if [ -n "$KT_TEST_KP" ]; then $KT_TEST_KP "$@"; return; fi
-    ANDROID_DATA=$WORK/data CLASSPATH=$KP app_process /system/bin dev.kiatweaks.projection.patch.Main "$@"
+    ANDROID_DATA=$WORK/data CLASSPATH=$KP app_process /system/bin dev.cabinwright.tweaks.projection.patch.Main "$@"
 }
 
 fresh_work() { rm -rf "$WORK" && mkdir -p "$WORK/data/dalvik-cache"; }

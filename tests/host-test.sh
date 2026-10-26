@@ -10,7 +10,7 @@
 #   projection.tbt/ (HKMC_GPM, HKMC_DiPO, Iap2ServerApp, HKMC_Navi_ExSL .apk/.odex and
 #   libautoreceiver_infobank.so), wireless.carplay.bt/libCarPlayCore.so,
 #   carplay.wifi.audio/libCarPlayAudio.so and libCarPlayUtils.so, projection.menu/
-#   HKMC_BtSettings.apk/.odex, wireless.projection/featurexml.cfg. Kia's files: keep them private.
+#   HKMC_BtSettings.apk/.odex, wireless.projection/featurexml.cfg. The manufacturer's files: keep them private.
 set -e
 HERE=$(cd "$(dirname "$0")/.." && pwd)
 STOCK=$(cd "$1" && pwd)
@@ -22,7 +22,7 @@ FAILS=0
 md5of() { if command -v md5sum >/dev/null; then md5sum "$1" | cut -d' ' -f1; else md5 -q "$1"; fi; }
 
 mkdir -p "$W/kp" "$W/stubs"
-javac -nowarn -d "$W/kp" "$HERE"/patch/src/dev/kiatweaks/projection/patch/*.java 2>/dev/null
+javac -nowarn -d "$W/kp" "$HERE"/patch/src/dev/cabinwright/tweaks/projection/patch/*.java 2>/dev/null
 REAL_MD5=$(command -v md5sum || command -v md5)
 REAL_CAT=$(command -v cat)
 cat > "$W/stubs/md5" <<EOF
@@ -46,7 +46,7 @@ printf '#!/bin/sh\ncase "$1" in /proc/sys/kernel/random/boot_id) echo test-boot 
 chmod 755 "$W"/stubs/*
 
 export KT_TEST_ROOT=$W/root KT_TEST_PATH=$W/stubs:/usr/bin:/bin:/usr/sbin:/sbin
-export KT_TEST_KP="java -cp $W/kp dev.kiatweaks.projection.patch.Main"
+export KT_TEST_KP="java -cp $W/kp dev.cabinwright.tweaks.projection.patch.Main"
 M=$KT_TEST_ROOT
 
 mock() {   # a stock /system

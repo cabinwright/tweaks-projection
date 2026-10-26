@@ -1,7 +1,7 @@
 # Shared by enable.sh, disable.sh and status.sh (sourced; $D is this folder). Replaces the
 # /system/bin/ifconfig -> toolbox link with lib/ifconfig, which narrows the stock ADB TCP
 # address on eth0 (192.168.0.123) to /32 so it never overlaps the projection hotspot's
-# 192.168.0.0/24 (see lib/ifconfig). This is the root-cause fix for what kia-tweaks'
+# 192.168.0.0/24 (see lib/ifconfig). This is the root-cause fix for what Tweaks'
 # eth0-guard repairs after the fact. Off puts the link back exactly. KT_TEST_ROOT: host tests.
 R=${KT_TEST_ROOT:-}
 export PATH=/data/nemesis/bin:/sbin:/vendor/bin:/system/sbin:/system/bin:/system/xbin

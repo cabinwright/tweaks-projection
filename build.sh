@@ -1,10 +1,10 @@
 #!/bin/sh
-# Builds the tweaks.projection NEMESIS package (a tweak pack for kia.tweaks):
+# Builds the tweaks.projection NEMESIS package (a tweak pack for cabinwright.tweaks):
 # dist/tweaks.projection.zip from package/ (NEMESIS.data, tweaks/<id>/, lib/) and the patch
 # tool (patch/, into lib/projpatch.jar). Needs the Android SDK (build-tools 29.0.2, platform 23)
 # and a JDK for that, plus zip. lib/leafia/libev6aac.so is committed, not rebuilt (it is built
 # from native/ev6aac/ with clang + lld).
-# Install over ADB (kia.tweaks 1.2 or newer must be installed; its tweaksd runs the tweaks):
+# Install over ADB (cabinwright.tweaks 1.4 or newer must be installed; its tweaksd runs the tweaks):
 #   adb push dist/tweaks.projection.zip /data/local/tmp/
 #   adb shell "nemesis install [--update] /data/local/tmp/tweaks.projection.zip"
 set -e
@@ -12,7 +12,7 @@ ROOT=$(cd "$(dirname "$0")" && pwd)
 P=$ROOT/package
 md5of() { if command -v md5sum >/dev/null; then md5sum "$1" | cut -d' ' -f1; else md5 -q "$1"; fi; }
 
-# the head unit's shell (mksh) has no printf, sed, awk or head
+# The head unit's shell (mksh) has no printf, sed, awk or head
 if grep -rnE '(^[[:space:]]*|[|;&(][[:space:]]*|\$\([[:space:]]*)(printf|sed|awk|head|tail)[[:space:]]' --include='*.sh' "$P" | grep -vE ':[0-9]+:[[:space:]]*#'; then
     echo "build.sh: a command the head unit doesn't have, in the scripts above" >&2
     exit 1

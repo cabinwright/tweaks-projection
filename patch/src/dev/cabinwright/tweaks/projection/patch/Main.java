@@ -2,12 +2,12 @@
  * projpatch: the patch tool of the tweaks.projection pack. AGPL-3.0-or-later (see LICENSE),
  * Copyright (c) 2026 hazptr.
  *
- * md5, delta and zipadd are copied from kia-tweaks' kiapatch (dev.kiatweaks.patch.Main,
+ * md5, delta and zipadd are copied from Tweaks' tweakpatch (dev.cabinwright.tweaks.patch.Main,
  * MIT License, Copyright (c) 2026 hazptr). lpzipadd and the recipe commands (Recipe.java)
  * follow HMG Leafia Plus's lpatch (tools/lpatch/lpatch.c, GPL-3.0-or-later,
  * https://github.com/VysseCodes/HMG-Leafia-Plus): same formats, rules and results.
  */
-package dev.kiatweaks.projection.patch;
+package dev.cabinwright.tweaks.projection.patch;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -25,9 +25,9 @@ import java.util.zip.Inflater;
 
 /**
  * Rebuilds patched system files on the head unit from its own stock files, so nothing of
- * the manufacturer's is shipped. Run as root with app_process:
+ * The manufacturer's is shipped. Run as root with app_process:
  *
- *   CLASSPATH=projpatch.jar app_process /system/bin dev.kiatweaks.projection.patch.Main <command> ...
+ *   CLASSPATH=projpatch.jar app_process /system/bin dev.cabinwright.tweaks.projection.patch.Main <command> ...
  *
  *   md5 <file>                      print the file's md5
  *   delta <patch.lpd> <src> <dst>   rebuild dst from src (HMG Leafia Plus's .lpd format:

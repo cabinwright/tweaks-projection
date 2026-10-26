@@ -1,6 +1,6 @@
 #!/system/bin/sh
 # aa-reconnect (tweak pack tweaks.projection): restarts the stock Android Auto receiver when it
-# gets stuck. Carried over from kia-tweaks' aa-recover (same author, hazptr) so that tweak can go.
+# gets stuck. Carried over from Tweaks' aa-recover (same author, hazptr) so that tweak can go.
 # Stock bug (com.google.android.projection.sink = /system/app/HKMC_GPM.apk): after the car's own Wi-Fi hotspot
 # has used the radio, GalConnectionManager can keep a stale "starting" state. Every
 # wireless attempt then logs "current Already AA Starting mode" and never opens its
@@ -11,7 +11,7 @@
 # mStartMode != 0, and only some of GalReceiverService's and WirelessExplorer's paths put it back
 # to 0 (setGpmStartMode(0), allSessionClear()). Fixing that path in HKMC_GPM itself would need a
 # new HKMC_GPM build and a car to test it on, so this keeps the workaround.
-# While kia-tweaks' own aa-recover still runs, this one only watches and leaves the restart to
+# While Tweaks' own aa-recover still runs, this one only watches and leaves the restart to
 # it, so installing this pack never restarts the receiver twice, and there's no gap when the
 # old tweak is turned off.
 # A service tweak: tweaksd keeps this running while the switch is on.
@@ -32,7 +32,7 @@ sink_pid() {
     done
 }
 
-# kia-tweaks' aa-recover is running (it acts on the same lines at the same moment)
+# Tweaks' aa-recover is running (it acts on the same lines at the same moment)
 old_running() {
     local c
     for c in /proc/[0-9]*/cmdline; do
@@ -60,7 +60,7 @@ while :; do
             [ $_n -ge $HITS ] && [ $((_now - _first)) -ge $SPAN ] || continue
             _pid=$(sink_pid)
             if old_running; then
-                log "receiver stuck ($_n stuck lines) - left to kia-tweaks' aa-recover"
+                log "receiver stuck ($_n stuck lines) - left to Tweaks' older aa-recover"
                 last "Android Auto receiver stuck - restarted by the older tweak"
             elif [ -n "$_pid" ] && restart_sink "$_pid"; then
                 log "receiver stuck ($_n stuck lines in $((_now - _first)) s) - restarted it (pid $_pid)"
