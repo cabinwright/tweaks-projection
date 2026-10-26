@@ -1,0 +1,61 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      # before setup-java: the runner's sdkmanager needs its default (newer) Java
+      - name: Android SDK parts
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "build-tools;29.0.2" "platforms;android-23" > /dev/null
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '11'
+
+      - name: Version
+        run: |
+          VERSION=$(sed -n 's/^version=//p' package/NEMESIS.data)
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "v$VERSION" ]; then
+            echo "::error::tag $GITHUB_REF_NAME doesn't match package/NEMESIS.data version $VERSION"
+            exit 1
+          fi
+
+      - name: Shell syntax
+        run: for f in $(find package tests -name '*.sh') package/lib/ifconfig; do sh -n "$f" || exit 1; done
+
+      - name: Build
+        run: |
+          sh build.sh
+          mv dist/tweaks.projection.zip "dist/tweaks.projection-v$VERSION.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tweaks.projection-v${{ env.VERSION }}
+          path: dist/*.zip
+
+      - name: Release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > "$RUNNER_TEMP/notes.md" <<NOTES
+          NEMESIS package \`tweaks.projection\` $VERSION, a tweak pack for kia-tweaks (needs kia.tweaks 1.2 or newer):
+          install \`tweaks.projection-v$VERSION.zip\` with NEMESIS (\`nemesis install --update <zip>\` over ADB).
+          Moving from HMG Leafia Plus's wireless.carplay.aa: see docs/migration.md.
+          NOTES
+          gh release create "$GITHUB_REF_NAME" dist/*.zip --title "kia-tweaks-projection $GITHUB_REF_NAME" \
+            --notes-file "$RUNNER_TEMP/notes.md" --generate-notes
