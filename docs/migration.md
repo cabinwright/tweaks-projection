@@ -1,12 +1,16 @@
 # Moving a car from Leafia's `wireless.carplay.aa` to `tweaks.projection`
 
-For the 2023 EV6 (`CVEV.USA.0000.V015.012.260507`) running HMG Leafia Plus v1.0.2 with all five
+For the 2023 EV6 (`CVEV.USA.0000.V015.012.260507`) running HMG Leafia Plus v1.0.2 or v1.0.5 (its
+v1.0.3 and v1.0.4 builds aren't recognised: update Leafia first) with all five
 parts (`/data/nemesis/wireless.carplay.aa.parts` = `1_projection 2_tbt 3_bridge 4_audio 5_menu`).
 The goal is that wireless projection never stops working. Nothing in steps 1 to 4 writes
 `/system`, kills an app or reboots. Commands run over ADB (`adb shell "..."`); `nemesis root -c`
 runs as root.
 
-## What the car has now (read on 2026-10-25)
+## What the car has now (read on 2026-10-25, on v1.0.2)
+
+On v1.0.5, `HKMC_GPM`, `HKMC_Navi_ExSL` and `HKMC_DiPO` have the md5s of `known()` in
+`lib/projection.sh` instead. The pack reads v1.0.2's as on, with "update ready" in the status.
 
 | File | md5 on the car | Pack state |
 |---|---|---|

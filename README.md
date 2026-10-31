@@ -7,7 +7,7 @@ and its `tweaksd` runs them. Written for the 2023 Kia EV6 (Gen5W, firmware
 `CVEV.USA.0000.V015.012.260507`) and matched to that firmware exactly.
 
 It is a port of what [HMG Leafia Plus](https://github.com/VysseCodes/HMG-Leafia-Plus)'s package
-`wireless.carplay.aa` (v1.0.2) installs on that car, file for file and checksum for checksum, so
+`wireless.carplay.aa` (v1.0.5) installs on that car, file for file and checksum for checksum, so
 a car that runs Leafia's package can move to this pack without anything changing (see
 [docs/migration.md](docs/migration.md)).
 
@@ -38,6 +38,10 @@ Phone Projection menu fix in `HKMC_BtSettings`, and `persist.sys.iap2.wifi` /
 turn-by-turn build, so while wireless is on they carry CarPlay's directions as well, and with
 directions off the status says so.
 
+The turn-by-turn builds also leave the cluster clean when a phone stops (no spinner), start
+fresh when CarPlay's navigation app changes, keep the car's speed limit, camera and trap data
+while a phone guides, and don't start wired Android Auto for a USB drive or hub.
+
 **ADB TCP and wireless projection together**: with ADB TCP on, init runs
 `/system/bin/ifconfig eth0 192.168.0.123` at every start, a /24 inside the hotspot's
 192.168.0.0/24, and phones never connect. This replaces the `ifconfig -> toolbox` link with a
@@ -57,7 +61,20 @@ files are backed up first to `/data/nemesis/backup/tweaks.projection`; they're t
 Leafia's own backups when its package already replaced them. Turning a tweak off puts back the
 exact stock bytes. Nothing reboots: changes show after the next head unit start.
 
-`status.sh` only reads checksums and properties, and it reports Leafia's install as "on". The
+While a switch changes, CarPlay, Android Auto, the navigation and Bluetooth settings are stopped
+with `pm disable` so none of them restarts against half-changed files, which ends any phone
+session. Every way out starts them again, and `status.sh` does it if the run was cut off (the
+car switched off). Each rebuilt app's odex is also copied into the Dalvik cache, so the next
+start doesn't optimize it again.
+
+## Updating from 1.2 or from Leafia v1.0.2
+
+Their builds of `HKMC_GPM`, `HKMC_Navi_ExSL` and `HKMC_DiPO` still count as on, and the pack
+never replaces them by itself, because that would end a phone session while driving. The status
+says "update ready": turn each tweak that shows it off and on again, parked, then restart the
+head unit. Before going back to pack 1.2, turn both tweaks off: 1.2 doesn't know the new builds.
+
+`status.sh` reads checksums and properties, changes nothing on `/system`, and reports Leafia's install as "on". The
 Tweaks app records a system tweak's switch from its first reported state, so installing this
 pack over Leafia's install changes nothing.
 
@@ -92,7 +109,8 @@ sh tests/host-test.sh <stock dir>
 `<stock dir>` holds the car's stock files laid out like Leafia's backups (see the script). They
 are the manufacturer's files, so keep them private. The test passes only if every result matches the
 checksums Leafia's install has on the car, turning off restores `/system` byte for byte, a
-failed install is undone, and unknown files are left alone.
+failed install is undone, unknown files are left alone, a car on older builds updates only when
+a switch moves, and no app is left stopped.
 
 ## License
 

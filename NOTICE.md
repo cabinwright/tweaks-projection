@@ -10,7 +10,7 @@ https://github.com/VysseCodes/HMG-Leafia-Plus, by VysseCodes and contributors, l
 the GNU General Public License v3.0. GPL-3.0 section 13 allows it to be combined with AGPL-3.0
 code, and its parts stay under the GPL-3.0.
 
-From it, taken from the tree at commit 9bd3027 (package v1.0.2 on the car):
+From it, taken from the tree at commit 08f4436 (package v1.0.5 on the car):
 
 - `package/lib/leafia/carplay-core-wifi.recipe`, `carplay-audio-formats.recipe`,
   `carplay-utils-converter.recipe` (from `recipes/`), unchanged apart from a first comment line
@@ -24,7 +24,8 @@ From it, taken from the tree at commit 9bd3027 (package v1.0.2 on the car):
   `Main.java`: a Java version of the recipe check/apply and zipadd of Leafia's `lpatch`
   (`tools/lpatch/lpatch.c`, GPL-3.0-or-later), with the same formats and results.
 - `package/lib/projection.sh`: a rewrite of the install, uninstall and checksum logic of
-  `packages/wireless-carplay-aa` (scripts and parts `1_projection` to `5_menu`).
+  `packages/wireless-carplay-aa` (scripts and parts `1_projection` to `5_menu`), including its
+  `apps_hold`/`apps_release` and `prefill_dalvik`.
 
 Leafia's notice credits as its own work: `lpatch`, the recipes and recipe tooling, the CarPlay
 Bluetooth bridge, the CarPlay Wi-Fi and audio patches and the `libev6aac.so` audio converter.

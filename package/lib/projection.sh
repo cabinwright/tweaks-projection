@@ -1,6 +1,6 @@
 # Tweak pack tweaks.projection: shared by its tweaks wireless-projection and cluster-directions
 # (sourced; $D is the tweak's folder). Reproduces, file for file, what HMG Leafia Plus's NEMESIS package
-# wireless.carplay.aa (v1.0.2) installs on a 2023 Kia EV6, firmware 260507:
+# wireless.carplay.aa (v1.0.5) installs on a 2023 Kia EV6, firmware 260507:
 #
 #   wireless-projection   wireless CarPlay/Android Auto feature flags (featurexml.cfg, two
 #                         permission files; from the NEMESIS community package
@@ -49,20 +49,29 @@ NEMESIS=$R/system/xbin/nemesis
 DEXOPT=$R/system/bin/dexopt
 FX=$R/system/onebin/cvev_us/featurexml.cfg     # ro.mobis.targetdir on this firmware
 PROPS="persist.sys.iap2.wifi persist.iap2.iden.wireless"
+HOLD=$STATE/stopped                            # apps stopped for a swap, until they start again
+HOLD_PKGS="com.google.android.projection.sink com.daudio.app.dipo com.tcc.iap2server com.mnsoft.navi com.android.btsettings"
 
-# md5 of each file: stock (firmware CVEV.USA.0000.V015.012.260507) and as Leafia builds it
-known() {   # <name> <stock|tbt|bridge|menu|ours>
+# md5 of each file: stock (firmware CVEV.USA.0000.V015.012.260507) and as Leafia builds it.
+# oldtbt and oldbridge are the v1.0.2 builds (this pack before 1.3, or Leafia's package on the
+# car): they count as on, and turning the tweak off and on again moves the car to the new build.
+# They are never rebuilt without that: swapping them would stop a running phone session.
+known() {   # <name> <stock|tbt|bridge|menu|ours|oldtbt|oldbridge>
     case "$1:$2" in
         HKMC_GPM.apk:stock) echo c155b0fb97384e645987dc1bd0f85922 ;;
         HKMC_GPM.odex:stock) echo 96cd7c27a9db19acb3900f21f57ea9f0 ;;
-        HKMC_GPM.apk:tbt) echo 329946b20cd51855d7da6056dbfbc4db ;;
+        HKMC_GPM.apk:tbt) echo 7c6df0f570677157326b105b6b87bfc2 ;;
+        HKMC_GPM.apk:oldtbt) echo 329946b20cd51855d7da6056dbfbc4db ;;
         HKMC_Navi_ExSL.apk:stock) echo 19559e742b1d21550aa8f0324e8e6d36 ;;
         HKMC_Navi_ExSL.odex:stock) echo 9cf41f78ce312b3762b354714d12eec3 ;;
-        HKMC_Navi_ExSL.apk:tbt) echo 496ef30d2c7f8260f25bd14d62c646c2 ;;
+        HKMC_Navi_ExSL.apk:tbt) echo b1fc88d42954c41e7944e9247647e9ad ;;
+        HKMC_Navi_ExSL.apk:oldtbt) echo 496ef30d2c7f8260f25bd14d62c646c2 ;;
         HKMC_DiPO.apk:stock) echo 01446fb79dc4fcfc826271ba18158fa4 ;;
         HKMC_DiPO.odex:stock) echo a565e180fdb0b73d6520f28c91cdba63 ;;
-        HKMC_DiPO.apk:tbt) echo c40739d474cd39ff3625ed73bfcd5b1c ;;
-        HKMC_DiPO.apk:bridge) echo cd240c40c923eaff5da5b41a7aacbbe6 ;;
+        HKMC_DiPO.apk:tbt) echo 4d7452a71fc2c120032ef1734d15f0fb ;;
+        HKMC_DiPO.apk:oldtbt) echo c40739d474cd39ff3625ed73bfcd5b1c ;;
+        HKMC_DiPO.apk:bridge) echo 154204dd700d02a6d47b4d7b6550c8f6 ;;
+        HKMC_DiPO.apk:oldbridge) echo cd240c40c923eaff5da5b41a7aacbbe6 ;;
         Iap2ServerApp.apk:stock) echo fde208439f993986a60396e759797a01 ;;
         Iap2ServerApp.odex:stock) echo 03950e4b691f846e5478a5a69818c65e ;;
         Iap2ServerApp.apk:tbt) echo 7e90fa7d8a161ade71e11dc15e56c410 ;;
@@ -114,7 +123,7 @@ state() {
     f=$(live "$1")
     [ -e "$f" ] || { echo absent; return; }
     s=$(sum "$f")
-    for v in stock tbt bridge menu ours; do
+    for v in stock tbt bridge menu ours oldtbt oldbridge; do
         [ -n "$s" ] && [ "$s" = "$(known "$1" $v)" ] && { echo $v; return; }
     done
     echo other
@@ -248,9 +257,77 @@ restore_lib() {   # <lib>
 # best effort: a stale optimized copy in dalvik-cache (only there if dexopt ever failed)
 wipe_dalvik() {
     local a c=
-    for a in "$@"; do c="$c /data/dalvik-cache/*@$a.apk@* /cache/dalvik-cache/*@$a.apk@*"; done
-    [ -n "$R" ] || $NEMESIS root 1000 -c "rm -f$c" >/dev/null 2>&1
+    for a in "$@"; do c="$c $R/data/dalvik-cache/*@$a.apk@* $R/cache/dalvik-cache/*@$a.apk@*"; done
+    if [ -n "$R" ]; then sh -c "rm -f$c"; else $NEMESIS root 1000 -c "rm -f$c" >/dev/null 2>&1; fi
     true
+}
+
+# Our APKs carry classes.dex, so at boot the package manager looks for the app in the Dalvik
+# cache (not at the odex beside it) and, finding nothing, re-optimizes it before the head unit
+# finishes starting. The cache entry is the same file as the odex, so put it there now. Stock
+# APKs have no classes.dex and use the odex. If Dalvik rejects it, the boot rebuilds it as before.
+prefill_dalvik() {
+    local o c cmd
+    [ "$(state $1.apk)" != stock ] || return 0
+    o=$(live $1.odex); c=$R/data/dalvik-cache/system@app@$1.apk@classes.dex
+    [ -s "$o" ] || return 0
+    cmd="cp $o $c.tmp && cmp $o $c.tmp && chmod 644 $c.tmp && mv $c.tmp $c"
+    if [ -n "$R" ]; then sh -c "$cmd" >/dev/null 2>&1
+    else $NEMESIS root 1000 -c "$cmd" >/dev/null 2>&1
+    fi
+    if [ "$(sum "$c")" = "$(sum "$o")" ]; then say "dalvik cache filled for $1"
+    else say "dalvik cache not filled for $1 - the next start optimizes it"
+    fi
+}
+
+refresh_dalvik() {
+    local a
+    wipe_dalvik "$@"
+    for a in "$@"; do prefill_dalvik $a; done
+}
+
+# ---- stopping the apps whose files change (with Android up)
+
+# Swapping files under running apps can start one against a half-changed system (DiPO and iAP2
+# in a crash loop, Android Auto stuck). pm disable also keeps persistent apps from restarting.
+# The list stays in $HOLD until they start again, which every way out of turn() does. A run
+# that dies (the car switched off) leaves them stopped: status.sh starts them again.
+android_up() { [ "$(getprop sys.boot_completed)" = 1 ]; }
+
+apps_hold() {
+    local p
+    android_up || return 0
+    if ! { mkdir -p "$STATE" && echo "$$ $(cat /proc/sys/kernel/random/boot_id)" > "$HOLD.run" && touch "$HOLD"; }; then
+        say "can't record stopped apps - not stopping them"
+        return 0
+    fi
+    for p in $HOLD_PKGS; do
+        pm path $p >/dev/null 2>&1 || continue
+        # recorded first, so a run that dies right after still starts it again
+        case " $(echo $(cat "$HOLD")) " in *" $p "*) ;; *) echo $p >> "$HOLD" ;; esac
+        pm disable $p >/dev/null 2>&1 && say "stopped $p for the swap" || say "couldn't stop $p"
+    done
+}
+
+apps_release() {
+    local p left=
+    [ -f "$HOLD" ] || return 0
+    android_up || { say "stopped apps start again once Android is up"; return 0; }
+    for p in $(cat "$HOLD"); do
+        pm enable $p >/dev/null 2>&1 && say "started $p again" || { left="$left $p"; say "couldn't start $p again"; }
+    done
+    if [ -z "$left" ]; then rm -f "$HOLD" "$HOLD.run"
+    else echo "$left" > "$HOLD"
+    fi
+}
+
+# status.sh: apps left stopped by a run that isn't running any more
+apps_recover() {
+    local pid boot
+    [ -f "$HOLD" ] || return 0
+    read -r pid boot < "$HOLD.run"
+    [ "$boot" = "$(cat /proc/sys/kernel/random/boot_id)" ] && [ -d "/proc/${pid:-none}" ] && return 0
+    apps_release >/dev/null
 }
 
 props_on() {
@@ -283,9 +360,9 @@ directions_state() {
     WHY=
     for n in HKMC_GPM.apk HKMC_Navi_ExSL.apk libautoreceiver_infobank.so HKMC_DiPO.apk Iap2ServerApp.apk; do
         case "$n:$(state $n)" in
-            *:tbt) on=$((on + 1)) ;;
+            *:tbt|*:oldtbt) on=$((on + 1)) ;;
             *:stock) off=$((off + 1)) ;;
-            HKMC_DiPO.apk:bridge|Iap2ServerApp.apk:bridge) ;;   # wireless-projection's (turn-by-turn included)
+            HKMC_DiPO.apk:bridge|HKMC_DiPO.apk:oldbridge|Iap2ServerApp.apk:bridge) ;;   # wireless-projection's (turn-by-turn included)
             *) WHY="$WHY $n" ;;
         esac
     done
@@ -302,8 +379,8 @@ wireless_state() {
     for n in featurexml.cfg androidauto_wireless.xml carplay_wireless.xml libCarPlayCore.so libCarPlayAudio.so \
              libCarPlayUtils.so libev6aac.so HKMC_BtSettings.apk HKMC_DiPO.apk Iap2ServerApp.apk; do
         case "$n:$(state $n)" in
-            *:ours|*:menu|*:bridge) on=$((on + 1)) ;;
-            *:stock|*.xml:absent|libev6aac.so:absent|HKMC_DiPO.apk:tbt|Iap2ServerApp.apk:tbt) off=$((off + 1)) ;;
+            *:ours|*:menu|*:bridge|*:oldbridge) on=$((on + 1)) ;;
+            *:stock|*.xml:absent|libev6aac.so:absent|HKMC_DiPO.apk:tbt|HKMC_DiPO.apk:oldtbt|Iap2ServerApp.apk:tbt) off=$((off + 1)) ;;
             *) WHY="$WHY $n" ;;
         esac
     done
@@ -360,7 +437,7 @@ wireless_install() {
         [ "$(state $n)" = ours ] || { put "$P/com.hkmc.software.connectivity.$n" "$(live $n)" || return 1; say "added $n"; }
     done
     if [ -n "$W_FX" ]; then put "$WORK/featurexml.cfg" "$FX" || return 1; say "wireless projection features on in featurexml.cfg"; fi
-    wipe_dalvik $W_APPS
+    refresh_dalvik $W_APPS
     [ "$(prop_state)" = on ] || props_on
 }
 
@@ -382,14 +459,13 @@ wireless_remove() {
     [ "$(state libev6aac.so)" = absent ] || { rm -f "$(live libev6aac.so)" && say "removed libev6aac.so" || return 1; }
     [ "$(state HKMC_BtSettings.apk)" = stock ] || restore_app HKMC_BtSettings || return 1
     for n in Iap2ServerApp HKMC_DiPO; do
-        [ "$(state $n.apk)" = bridge ] || continue
-        if [ "$(state HKMC_GPM.apk)" = tbt ]; then
-            build_app $n tbt && install_app $n || return 1
-        else
-            restore_app $n || return 1
-        fi
+        case "$(state $n.apk)" in bridge|oldbridge) ;; *) continue ;; esac
+        case "$(state HKMC_GPM.apk)" in
+            tbt|oldtbt) build_app $n tbt && install_app $n || return 1 ;;
+            *) restore_app $n || return 1 ;;
+        esac
     done
-    wipe_dalvik HKMC_BtSettings Iap2ServerApp HKMC_DiPO
+    refresh_dalvik HKMC_BtSettings Iap2ServerApp HKMC_DiPO
     [ "$(prop_state)" = off ] || props_off
 }
 
@@ -402,7 +478,7 @@ directions_build() {
     done
     # with wireless-projection on, these already carry turn-by-turn (bridge build)
     for n in HKMC_DiPO Iap2ServerApp; do
-        [ "$(state $n.apk)" = stock ] && { build_app $n tbt || return 1; D_APPS="$D_APPS $n"; }
+        case "$(state $n.apk)" in stock|oldtbt) build_app $n tbt || return 1; D_APPS="$D_APPS $n" ;; esac
     done
     [ "$(state libautoreceiver_infobank.so)" = tbt ] || { build_lib libautoreceiver_infobank.so || return 1; D_LIB=1; }
     true
@@ -412,17 +488,17 @@ directions_install() {
     local n
     for n in $D_APPS; do install_app $n || return 1; done
     if [ -n "$D_LIB" ]; then put "$WORK/libautoreceiver_infobank.so" "$(live libautoreceiver_infobank.so)" || return 1; say "installed libautoreceiver_infobank.so (turn-by-turn)"; fi
-    wipe_dalvik $D_APPS
+    refresh_dalvik $D_APPS
 }
 
 # turn-by-turn files back to stock; the bridge builds stay while wireless-projection is on
 directions_remove() {
     local n
     for n in HKMC_GPM HKMC_Navi_ExSL HKMC_DiPO Iap2ServerApp; do
-        [ "$(state $n.apk)" = tbt ] && { restore_app $n || return 1; }
+        case "$(state $n.apk)" in tbt|oldtbt) restore_app $n || return 1 ;; esac
     done
     [ "$(state libautoreceiver_infobank.so)" = stock ] || restore_lib libautoreceiver_infobank.so || return 1
-    wipe_dalvik HKMC_GPM HKMC_Navi_ExSL HKMC_DiPO Iap2ServerApp
+    refresh_dalvik HKMC_GPM HKMC_Navi_ExSL HKMC_DiPO Iap2ServerApp
 }
 
 # turn <wireless|directions> <on|off> <tweak id>: the whole enable.sh / disable.sh
@@ -433,8 +509,10 @@ turn() {
     [ "$st" = error ] && fail "files neither stock nor this tweak's:$WHY - leaving them alone"
     [ "$st" = $want ] && { say "already $want"; exit 0; }
     fresh_work || fail "can't make $WORK"
+    trap apps_release EXIT
     if [ $want = on ]; then
         ${1}_build || fail "nothing changed"
+        apps_hold
         sys_rw
         if ! ${1}_install; then
             echo "putting back what was changed"
@@ -443,6 +521,7 @@ turn() {
             fail "turning on failed"
         fi
     else
+        apps_hold
         sys_rw
         ${1}_remove || fail "turning off failed"
     fi

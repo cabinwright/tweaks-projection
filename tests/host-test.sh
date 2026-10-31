@@ -41,6 +41,14 @@ mkdir -p "$KT_TEST_ROOT/props" "$KT_TEST_ROOT/data/property"
 printf '%s' "$2" > "$KT_TEST_ROOT/props/$1"
 case "$1" in persist.*) printf '%s' "$2" > "$KT_TEST_ROOT/data/property/$1" ;; esac
 EOF
+cat > "$W/stubs/pm" <<'EOF'
+#!/bin/sh
+echo "$*" >> "$KT_TEST_ROOT/pm.log"
+case "$1" in
+    disable) touch "$KT_TEST_ROOT/disabled/$2" ;;
+    enable) rm -f "$KT_TEST_ROOT/disabled/$2" ;;
+esac
+EOF
 printf '#!/bin/sh\nexit 0\n' > "$W/stubs/sleep"
 printf '#!/bin/sh\ncase "$1" in /proc/sys/kernel/random/boot_id) echo test-boot ;; *) %s "$@" ;; esac\n' "$REAL_CAT" > "$W/stubs/cat"
 chmod 755 "$W"/stubs/*
@@ -52,7 +60,8 @@ M=$KT_TEST_ROOT
 mock() {   # a stock /system
     rm -rf "$M"
     mkdir -p $M/system/app $M/system/lib $M/system/onebin/cvev_us $M/system/etc/permissions $M/system/xbin \
-        $M/system/bin $M/data/nemesis/backup $M/data/property $M/props
+        $M/system/bin $M/data/nemesis/backup $M/data/property $M/data/dalvik-cache $M/props $M/disabled
+    echo 1 > $M/props/sys.boot_completed
     for a in HKMC_GPM HKMC_DiPO Iap2ServerApp HKMC_Navi_ExSL; do cp "$STOCK/projection.tbt/$a.apk" "$STOCK/projection.tbt/$a.odex" $M/system/app/; done
     cp "$STOCK"/projection.menu/HKMC_BtSettings.apk "$STOCK"/projection.menu/HKMC_BtSettings.odex $M/system/app/
     cp "$STOCK/projection.tbt/libautoreceiver_infobank.so" "$STOCK/wireless.carplay.bt/libCarPlayCore.so" \
@@ -71,11 +80,11 @@ sums() {
      done)
 }
 
-# what HMG Leafia Plus's wireless.carplay.aa v1.0.2 left on the car (md5s read from the car)
-LEAFIA="329946b20cd51855d7da6056dbfbc4db system/app/HKMC_GPM.apk
-cd240c40c923eaff5da5b41a7aacbbe6 system/app/HKMC_DiPO.apk
+# what HMG Leafia Plus's wireless.carplay.aa v1.0.5 builds (its manifest; the rest read from the car)
+LEAFIA="7c6df0f570677157326b105b6b87bfc2 system/app/HKMC_GPM.apk
+154204dd700d02a6d47b4d7b6550c8f6 system/app/HKMC_DiPO.apk
 75d7fea4d2009be6aa5c840118f58c94 system/app/Iap2ServerApp.apk
-496ef30d2c7f8260f25bd14d62c646c2 system/app/HKMC_Navi_ExSL.apk
+b1fc88d42954c41e7944e9247647e9ad system/app/HKMC_Navi_ExSL.apk
 93ecaa97597a79be2a10728e45c72b33 system/app/HKMC_BtSettings.apk
 c08410a8d32a615b1aa805cd8a243d52 system/lib/libautoreceiver_infobank.so
 c537d5849f1fa881b0c79333ecfd83e4 system/lib/libCarPlayCore.so
@@ -157,5 +166,50 @@ printf 'toolbox ifconfig eth0 192.168.0.123 netmask 255.255.255.255\ntoolbox ifc
 run adb-tcp-hotspot disable
 [ -h $M/system/bin/ifconfig ] && [ "$(readlink $M/system/bin/ifconfig)" = toolbox ] && ok "toolbox link back" || bad "link not restored"
 rm -f "$W/stubs/netcfg"
+
+echo "F. a car on the v1.0.2 builds: stays on until the switch moves, then moves to the new ones"
+OLD=$W/old; mkdir -p "$OLD"
+for l in HKMC_DiPO.bridge HKMC_DiPO.tbt HKMC_GPM.tbt HKMC_Navi_ExSL.tbt; do
+    git -C "$HERE" show f5f44b0:package/lib/leafia/ev6/$l.lpd > "$OLD/$l.lpd"
+done
+old_build() {   # <App> <tbt|bridge>
+    $KT_TEST_KP delta "$OLD/$1.$2.lpd" "$M/data/nemesis/backup/tweaks.projection/$1.odex" "$W/old.dex" \
+        && $KT_TEST_KP lpzipadd "$M/data/nemesis/backup/tweaks.projection/$1.apk" "$W/old.dex" "$M/system/app/$1.apk"
+}
+updated() { case "$(status)" in *"$1"*) ok "$2" ;; *) bad "$2: $(status)" ;; esac; }
+mock; sums > "$W/stock"
+sh $T/cluster-directions/enable.sh > /dev/null 2>&1; sh $T/wireless-projection/enable.sh > /dev/null 2>&1
+old_build HKMC_GPM tbt; old_build HKMC_Navi_ExSL tbt; old_build HKMC_DiPO bridge
+rm -f $M/data/nemesis/tweaks.projection/*.pending
+expect on on; updated "update ready" "both offer the update"
+run wireless-projection disable; expect on off
+run wireless-projection enable; expect on on
+run cluster-directions disable; expect off on
+run cluster-directions enable; expect on on; is_leafia
+rm -f $M/data/nemesis/tweaks.projection/*.pending
+case "$(status)" in *"update ready"*) bad "still offers the update: $(status)" ;; *) ok "update done" ;; esac
+old_build HKMC_GPM tbt; old_build HKMC_Navi_ExSL tbt; old_build HKMC_DiPO bridge
+run cluster-directions disable; run wireless-projection disable; expect off off; is_stock
+
+echo "G. the apps stop for a swap and always start again"
+started() { [ -z "$(ls $M/disabled)" ] && [ ! -f $M/data/nemesis/tweaks.projection/stopped ] && ok "no app left stopped" || bad "left stopped: $(ls $M/disabled)"; }
+mock; run cluster-directions enable; started
+grep -q "^disable com.daudio.app.dipo" $M/pm.log && grep -q "^enable com.daudio.app.dipo" $M/pm.log && ok "stopped and started" || bad "pm calls: $(cat $M/pm.log)"
+for a in HKMC_GPM HKMC_Navi_ExSL HKMC_DiPO Iap2ServerApp; do
+    cmp -s $M/system/app/$a.odex "$M/data/dalvik-cache/system@app@$a.apk@classes.dex" && ok "dalvik cache filled for $a" || bad "dalvik cache for $a"
+done
+run wireless-projection enable; run wireless-projection disable; run cluster-directions disable; started
+[ -z "$(ls $M/data/dalvik-cache)" ] && ok "stock apps have no dalvik cache entry" || bad "dalvik cache left: $(ls $M/data/dalvik-cache)"
+mock; chmod 555 $M/system/onebin/cvev_us; run wireless-projection enable fail; chmod 755 $M/system/onebin/cvev_us; started
+mock; rm $M/props/sys.boot_completed; run cluster-directions enable
+[ ! -e $M/pm.log ] && ok "Android down: nothing to stop" || bad "pm ran with Android down"
+mock; run cluster-directions enable; run cluster-directions disable
+: > $M/pm.log; touch $M/disabled/com.tcc.iap2server; echo com.tcc.iap2server > $M/data/nemesis/tweaks.projection/stopped
+echo "999999 other-boot" > $M/data/nemesis/tweaks.projection/stopped.run
+[ "$(sh $T/wireless-projection/status.sh | wc -l)" = 1 ] && started || bad "status isn't one line"
+touch $M/disabled/com.tcc.iap2server; echo com.tcc.iap2server > $M/data/nemesis/tweaks.projection/stopped
+echo "$$ test-boot" > $M/data/nemesis/tweaks.projection/stopped.run
+sh $T/wireless-projection/status.sh > /dev/null
+[ -e $M/disabled/com.tcc.iap2server ] && ok "a run still going keeps its apps stopped" || bad "started under a live run"
 
 [ $FAILS = 0 ] && echo "all passed" || { echo "$FAILS failed"; exit 1; }
