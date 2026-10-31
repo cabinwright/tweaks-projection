@@ -1,0 +1,82 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      # before setup-java: the runner's sdkmanager needs its default (newer) Java
+      - name: Android SDK parts
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "build-tools;29.0.2" "platforms;android-23" > /dev/null
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '11'
+
+      - name: Version
+        run: |
+          VERSION=$(sed -n 's/^version=//p' package/NEMESIS.data)
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "v$VERSION" ]; then
+            echo "::error::tag $GITHUB_REF_NAME doesn't match package/NEMESIS.data version $VERSION"
+            exit 1
+          fi
+
+      - name: Shell syntax
+        run: for f in $(find package tests tools -name '*.sh'); do sh -n "$f" || exit 1; done
+
+      - name: Tweaks
+        run: sh tools/check-tweaks.sh package
+
+      # the pinned lint tools and settings of the Cabinwright repos
+      - uses: actions/checkout@v4
+        with:
+          repository: cabinwright/menu
+          ref: v1.0
+          path: menu
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/cabinwright-tools
+          key: cabinwright-tools-${{ runner.os }}-${{ hashFiles('menu/api/tools/fetch-tools.sh') }}
+
+      # ShellCheck (the tweak scripts as the car's mksh) and javac on the patch tool
+      - name: Lint
+        run: |
+          sh menu/api/tools/fetch-tools.sh
+          sh menu/api/tools/lint.sh .
+
+      - name: Build
+        run: |
+          sh build.sh
+          mv dist/tweaks.projection.zip "dist/tweaks.projection-v$VERSION.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tweaks.projection-v${{ env.VERSION }}
+          path: dist/*.zip
+
+      - name: Release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > "$RUNNER_TEMP/notes.md" <<NOTES
+          \`tweaks.projection\` $VERSION, a tweak pack for Cabinwright: install it from the Cabinwright store
+          (cabinwright.store 1.0 or newer), whose runner runs its tweaks.
+          Moving from HMG Leafia Plus's wireless.carplay.aa: see docs/migration.md.
+          NOTES
+          gh release create "$GITHUB_REF_NAME" dist/*.zip --title "tweaks-projection $GITHUB_REF_NAME" \
+            --notes-file "$RUNNER_TEMP/notes.md" --generate-notes
