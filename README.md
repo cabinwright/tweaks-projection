@@ -86,7 +86,7 @@ sh build.sh     # -> dist/tweaks.projection.zip
 ```
 
 Needs the Android SDK (build-tools 29.0.2, platform 23), a JDK (8 or newer) and `zip`.
-`build.sh` also runs `tools/check-tweaks.sh`. CI lints with the Cabinwright menu repo's
+`build.sh` also runs `tools/check-tweaks.sh`. CI lints with the [Cabinwright SDK](https://github.com/cabinwright/sdk)'s
 `api/tools/lint.sh` (ShellCheck, javac), pinned at `v1.0`.
 `libev6aac.so` is committed. Rebuilding it needs clang and lld (`native/ev6aac/build.sh`;
 Ubuntu clang 18.1.3 reproduces it byte for byte).
