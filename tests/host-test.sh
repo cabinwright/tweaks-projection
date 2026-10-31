@@ -221,43 +221,7 @@ chmod u+w "$M/system/lib"; echo x >>"$M/system/lib/libCarPlayAudio.so"; chmod u-
 sums >"$W/changed"
 on wireless-projection fail; expect off error; unchanged "$W/changed"
 
-echo "E. adb-tcp-hotspot: the ifconfig wrapper in and out"
-mock
-chmod u+w "$M/system/bin"
-printf '#!/bin/sh\necho "toolbox $*" >> %s/toolbox.log\n' "$M" >"$M/system/bin/toolbox"
-chmod 755 "$M/system/bin/toolbox"
-ln -s toolbox "$M/system/bin/ifconfig"
-chmod u-w "$M/system/bin"
-printf '#!/bin/sh\necho "eth0     UP    192.168.0.123/24  0x00001043 0a:d0:0d:00:0b:ad"\n' >"$W/stubs/netcfg"
-chmod 755 "$W/stubs/netcfg"
-A=$T/adb-tcp-hotspot
-case "$(as adb-tcp-hotspot sh "$A/status.sh")" in "off ADB TCP is blocking"*) ok "status off (clash seen)" ;; *) bad "status: $(as adb-tcp-hotspot sh "$A/status.sh")" ;; esac
-on adb-tcp-hotspot
-if [ ! -h "$M/system/bin/ifconfig" ] && cmp -s "$M/system/bin/ifconfig" "$HERE/package/lib/ifconfig" && [ -x "$M/system/bin/ifconfig" ]; then
-    ok "wrapper installed, executable"
-else
-    bad "wrapper not installed"
-fi
-if grep -qx 'adb-tcp-hotspot service start set_adb_ip' "$KT_LOG"; then ok "stock set_adb_ip re-run through the wrapper"; else bad "set_adb_ip not re-run"; fi
-case "$(as adb-tcp-hotspot sh "$A/status.sh")" in on*) ok "status on" ;; *) bad "status: $(as adb-tcp-hotspot sh "$A/status.sh")" ;; esac
-# the wrapper itself: only the stock call changes
-sed "s#/system/bin/toolbox#$M/system/bin/toolbox#" "$HERE/package/lib/ifconfig" >"$W/ifc"
-: >"$M/toolbox.log"
-sh "$W/ifc" eth0 192.168.0.123
-sh "$W/ifc" usb0 up
-sh "$W/ifc" eth0 192.168.0.123 netmask 255.255.255.255
-if printf 'toolbox ifconfig eth0 192.168.0.123 netmask 255.255.255.255\ntoolbox ifconfig usb0 up\ntoolbox ifconfig eth0 192.168.0.123 netmask 255.255.255.255\n' | diff - "$M/toolbox.log" >/dev/null; then
-    ok "wrapper: /32 for set_adb_ip's call, everything else unchanged"
-else
-    bad "wrapper calls"
-    cat "$M/toolbox.log"
-fi
-off adb-tcp-hotspot
-if [ -h "$M/system/bin/ifconfig" ] && [ "$(readlink "$M/system/bin/ifconfig")" = toolbox ]; then ok "toolbox link back"; else bad "link not restored"; fi
-rm -f "$W/stubs/netcfg"
-declared
-
-echo "F. aa-reconnect: restarts the receiver on a stuck loop, not on old lines arriving at once"
+echo "E. the Android Auto watcher: restarts the receiver on a stuck loop, not on old lines arriving at once"
 mock
 stuck='E/AAProjection( 1234): current Already AA Starting mode'
 # old lines, all at once
@@ -271,11 +235,11 @@ cat >"$W/stubs/sleep" <<'EOF'
 kill $PPID
 EOF
 chmod 755 "$W/stubs/sleep"
-KT_TEST_LOGCAT=$W/logcat as aa-reconnect sh "$T/aa-reconnect/run.sh" >/dev/null 2>&1 || true
+KT_TEST_LOGCAT=$W/logcat as wireless-projection sh "$T/wireless-projection/run.sh" >/dev/null 2>&1 || true
 if grep -q ' kill ' "$KT_LOG"; then bad "restarted on old lines"; else ok "old lines in one burst: left alone"; fi
-KT_TEST_LOGCAT=$W/logcat-live as aa-reconnect sh "$T/aa-reconnect/run.sh" >/dev/null 2>&1 || true
-if grep -qx 'aa-reconnect kill com.google.android.projection.sink' "$KT_LOG"; then ok "stuck receiver restarted through kt"; else bad "receiver not restarted"; fi
-case "$(as aa-reconnect sh "$T/aa-reconnect/status.sh")" in "on restarted the stuck Android Auto receiver"*) ok "status: $(as aa-reconnect sh "$T/aa-reconnect/status.sh")" ;; *) bad "status: $(as aa-reconnect sh "$T/aa-reconnect/status.sh")" ;; esac
+KT_TEST_LOGCAT=$W/logcat-live as wireless-projection sh "$T/wireless-projection/run.sh" >/dev/null 2>&1 || true
+if grep -qx 'wireless-projection kill com.google.android.projection.sink' "$KT_LOG"; then ok "stuck receiver restarted through kt"; else bad "receiver not restarted"; fi
+if grep -q "restarted the stuck" "$W/data/wireless-projection/last"; then ok "the last action is kept for status.sh"; else bad "no last action"; fi
 printf '#!/bin/sh\nexit 0\n' >"$W/stubs/sleep"
 declared
 

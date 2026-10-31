@@ -1,5 +1,5 @@
 #!/system/bin/sh
-# aa-reconnect (tweak pack tweaks.projection): restarts the stock Android Auto receiver when it
+# wireless-projection: while the tweak is on, restarts the stock Android Auto receiver when it
 # gets stuck.
 # Stock bug (com.google.android.projection.sink = /system/app/HKMC_GPM.apk): after the car's own Wi-Fi hotspot
 # has used the radio, GalConnectionManager can keep a stale "starting" state. Every
@@ -11,8 +11,8 @@
 # mStartMode != 0, and only some of GalReceiverService's and WirelessExplorer's paths put it back
 # to 0 (setGpmStartMode(0), allSessionClear()). Fixing that path in HKMC_GPM itself would need a
 # new HKMC_GPM build and a car to test it on, so this keeps the workaround.
-# A service tweak: the runner keeps this running while the switch is on. It reads the
-# receiver's log and restarts it through kt.
+# The runner keeps this running while the switch is on. It reads the receiver's log and
+# restarts it through kt.
 PATH=$PATH:/system/bin:/system/xbin
 SINK=com.google.android.projection.sink
 HITS=6        # stuck lines before acting: two or three per retry, so about three retries

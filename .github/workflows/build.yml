@@ -35,7 +35,7 @@ jobs:
           fi
 
       - name: Shell syntax
-        run: for f in $(find package tests tools -name '*.sh') package/lib/ifconfig; do sh -n "$f" || exit 1; done
+        run: for f in $(find package tests tools -name '*.sh'); do sh -n "$f" || exit 1; done
 
       - name: Tweaks
         run: sh tools/check-tweaks.sh package

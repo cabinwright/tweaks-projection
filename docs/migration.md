@@ -104,11 +104,7 @@ both tweaks still say "on". `persist.adb.tcp.port` stays 5555 (tweaks-adb's `adb
 the copied ADB record to know Leafia set it). Leafia's backup folders stay where they are; the
 runner keeps its own copies of the originals, so they can be deleted.
 
-**4. ADB TCP fix.** In the Tweaks app, turn on **ADB TCP and wireless projection together**. It
-replaces the `ifconfig` link at once, and if eth0 has the /24 right now it narrows it at once
-too. From then on the stock `set_adb_ip` gives eth0 a /32 at every start.
-
-**5. Restart when convenient.** It isn't required, since no file changed. Afterwards check
+**4. Restart when convenient.** It isn't required, since no file changed. Afterwards check
 wireless Android Auto, wireless CarPlay with audio, directions in the cluster, and that all four
 tweaks still show "on".
 

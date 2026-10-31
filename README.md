@@ -15,8 +15,10 @@ a car that runs Leafia's package can move to this pack without anything changing
 |---|---|---|
 | Wireless Android Auto and CarPlay (`wireless-projection`) | oneshot, changes system files | Phones connect over the car's own Wi-Fi, without a cable. |
 | Navigation directions in the instrument cluster (`cluster-directions`) | oneshot, changes system files | The phone's next turn in the cluster and head-up display. |
-| ADB TCP and wireless projection together (`adb-tcp-hotspot`) | oneshot, changes system files | The Engineering Mode "ADB TCP" switch no longer breaks wireless projection. |
-| Reconnect wireless Android Auto (`aa-reconnect`) | service | Restarts the Android Auto receiver when it gets stuck after the car's hotspot was used. |
+
+Both turn on by themselves once you accept the install. While wireless projection is on it also
+restarts the Android Auto receiver when it gets stuck after the car's hotspot has been used.
+ADB TCP's clash with the hotspot is fixed by tweaks-adb's **ADB over Wi-Fi**.
 
 Needs cabinwright.store 1.0 or newer.
 
@@ -41,13 +43,6 @@ turn-by-turn build, so while wireless is on they carry CarPlay's directions as w
 directions off the status says so. The two tweaks can be turned on and off in any order: the
 runner keeps each tweak's build of these files in its place, so turning one off leaves the
 other's.
-
-**ADB TCP and wireless projection together**: with ADB TCP on, init runs
-`/system/bin/ifconfig eth0 192.168.0.123` at every start, a /24 inside the hotspot's
-192.168.0.0/24, and phones never connect. This replaces the `ifconfig -> toolbox` link with a
-four-line script that gives exactly that call a /32 netmask and passes everything else to
-`toolbox`, so the clash never happens. If eth0 already has the /24, it runs the stock
-`set_adb_ip` again so the fix works at once. Turning it off puts the link back.
 
 **Reconnect wireless Android Auto**: reads the receiver's log for its "Already AA Starting
 mode" loop and restarts the receiver (`com.google.android.projection.sink`) when it is stuck.
@@ -78,7 +73,6 @@ others) as the original, so turning the tweak off restores stock just the same.
 | `package/lib/projection.sh` | shared code of the two projection tweaks |
 | `package/lib/projection-adopt.sh` | taking over what Leafia's package installed |
 | `package/lib/leafia/` | Leafia's patch data, `libev6aac.so`, the two feature files |
-| `package/lib/ifconfig` | the wrapper `adb-tcp-hotspot` installs |
 | `patch/` | `projpatch`: md5, delta, zipadd (from Tweaks' tweakpatch), lpzipadd, recipe check/apply |
 | `native/ev6aac/` | source of `libev6aac.so` (Leafia's, unchanged) |
 | `tools/check-tweaks.sh` | checks every `tweak.conf` (keys, needs, `disable.sh` where needed) |
