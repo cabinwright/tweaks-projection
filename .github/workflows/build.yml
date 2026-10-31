@@ -15,6 +15,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: true
 
       # before setup-java: the runner's sdkmanager needs its default (newer) Java
       - name: Android SDK parts
@@ -40,23 +42,16 @@ jobs:
       - name: Tweaks
         run: sh tools/check-tweaks.sh package
 
-      # the pinned lint tools and settings of the Cabinwright repos
-      - uses: actions/checkout@v4
-        with:
-          repository: cabinwright/menu
-          ref: v1.0
-          path: menu
-
       - uses: actions/cache@v4
         with:
           path: ~/.cache/cabinwright-tools
-          key: cabinwright-tools-${{ runner.os }}-${{ hashFiles('menu/api/tools/fetch-tools.sh') }}
+          key: cabinwright-tools-${{ runner.os }}-${{ hashFiles('sdk/api/tools/fetch-tools.sh') }}
 
       # ShellCheck (the tweak scripts as the car's mksh) and javac on the patch tool
       - name: Lint
         run: |
-          sh menu/api/tools/fetch-tools.sh
-          sh menu/api/tools/lint.sh .
+          sh sdk/api/tools/fetch-tools.sh
+          sh sdk/api/tools/lint.sh .
 
       - name: Build
         run: |
